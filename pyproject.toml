@@ -1,0 +1,84 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jarvis"
+version = "0.0.1"
+description = "Local Windows AI voice assistant"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Jarvis" }]
+
+# Major versions pinned per SPEC.md § Dependencies.
+dependencies = [
+  "pydantic>=2,<3",
+  "PySide6>=6,<7",
+  "openwakeword>=0.6,<1",
+  "faster-whisper>=1,<2",
+  "silero-vad>=5,<6",
+  "piper-tts>=1,<2",
+  "sounddevice>=0.4,<1",
+  # Direct: TTS output uses scipy.signal.resample_poly for the Piper-rate ->
+  # device-native-rate path. Linear interpolation produced audible spectral-
+  # imaging distortion when 22050 Hz had to fall back to 48 kHz. (scipy was
+  # already pulled in transitively by openwakeword, so install size is flat.)
+  "scipy>=1,<2",
+  "httpx>=0.27,<1",
+  "psutil>=5,<6",
+  "pyautogui>=0.9,<1",
+  "pillow>=10,<12",
+  # Global hotkeys. pynput chosen over `keyboard` because the latter
+  # requires admin on Windows for media-key hooks — a non-starter for
+  # an installer that should "just work" without elevation prompts.
+  # See ui/hotkeys.py header for the full rationale.
+  "pynput>=1.7,<2",
+  # Model Context Protocol client (Anthropic's official SDK). Used by
+  # jarvis/tools/mcp_client.py to connect to external MCP servers
+  # (Trayce, etc.) over Streamable HTTP and adapt their tools into the
+  # local ToolRegistry. All MCP connections are best-effort; a missing
+  # `mcp` install or unreachable server never blocks startup.
+  "mcp>=1,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<9",
+  "pytest-asyncio>=0.23,<1",
+  "ruff>=0.5,<1",
+  "pyright>=1.1,<2",
+  "pyinstaller>=6,<7",
+]
+
+[project.scripts]
+jarvis = "jarvis.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["jarvis*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# `manual` marks tests that operators run by hand for production verification
+# (e.g. RSS-drop measurement after SLEEPING). They are skipped by default;
+# run with `pytest -m manual` to opt in.
+markers = [
+  "manual: operator-run verification (RSS drop, Ollama eviction); skipped by default",
+]
+addopts = "-m 'not manual'"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "W"]
+ignore = []
+
+[tool.pyright]
+include = ["jarvis", "tests"]
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
+reportMissingImports = "warning"

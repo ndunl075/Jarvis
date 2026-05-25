@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.eggs/
+.pytest_cache/
+.ruff_cache/
+.pyright/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Build artifacts (PyInstaller, setuptools)
+build/
+dist/
+*.spec.bak
+
+# Inno Setup output
+Output/
+
+# Model files (whisper, piper, openWakeWord weights)
+*.bin
+*.onnx
+*.tflite
+*.pt
+*.pth
+*.gguf
+models/
+
+# Logs
+*.log
+logs/
+
+# IDE / OS
+.vscode/
+.idea/
+.cursor/
+.claude/
+.aider*
+*.swp
+.DS_Store
+Thumbs.db
+
+# Secrets / local env
+.env
+.env.*
+
+# Local dev capture files (kept out of repo root so they cannot ship by accident)
+/*-out.txt
+/*-err.txt
+_overlay_*.py
+_overlay_*.txt
+
+external/
