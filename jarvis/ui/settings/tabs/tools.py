@@ -74,6 +74,7 @@ _LOCAL_TOOL_NAMES: tuple[str, ...] = (
     "read_note",
     "report_cpu_and_memory_percentages",
     "screenshot",
+    "see_screen",
     "show_clipboard_history",
     "show_dashboard",
     "show_logs",

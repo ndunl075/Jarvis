@@ -901,3 +901,32 @@ def test_migrate_v18_to_v19_preserves_explicit_first_run_flag():
     assert out["general"]["first_run_completed"] is False
 
 
+# --- v19 -> v20: vision section for see_screen tool ----------------------
+
+
+def test_migrate_v19_to_v20_adds_vision_section_with_defaults():
+    data = {"schema_version": 19}
+    out = migrate(data)
+    assert out["vision"]["model"] == "llava:7b"
+    assert out["vision"]["max_image_dim"] == 1280
+    assert out["vision"]["max_tokens"] == 512
+    assert out["vision"]["temperature"] == 0.2
+
+
+def test_migrate_v19_to_v20_preserves_existing_vision_settings():
+    data = {
+        "schema_version": 19,
+        "vision": {
+            "model": "moondream",
+            "max_image_dim": 640,
+            "max_tokens": 256,
+            "temperature": 0.5,
+        },
+    }
+    out = migrate(data)
+    assert out["vision"]["model"] == "moondream"
+    assert out["vision"]["max_image_dim"] == 640
+    assert out["vision"]["max_tokens"] == 256
+    assert out["vision"]["temperature"] == 0.5
+
+

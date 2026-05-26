@@ -258,6 +258,78 @@ class OllamaClient:
                 f"ollama returned HTTP {e.response.status_code}"
             ) from e
 
+    # -- vision (multimodal) --
+
+    async def vision_chat(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        image_b64: str,
+        max_tokens: int = 512,
+        temperature: float = 0.2,
+    ) -> str:
+        """One-shot multimodal chat: ship `image_b64` (no data: prefix) +
+        `prompt` to `model` and return the assistant text.
+
+        Model is a per-request argument because the vision model
+        (e.g. llava:7b) is typically different from the conversational
+        `self.model` (e.g. qwen2.5:7b-instruct). The text model can't
+        accept images and would error opaquely; routing this call here
+        rather than via stream_chat keeps the model swap explicit.
+
+        Non-streaming on purpose: vision responses are short (a sentence
+        or two describing the screen) and the call sits behind a single
+        spoken result, so the streaming machinery isn't worth it. Read
+        timeout extended to 120 s because the first vision-model
+        inference on CPU can take 30-60 s cold.
+
+        Raises OllamaConnectionError / OllamaModelNotFoundError /
+        OllamaError on the same conditions as stream_chat so callers
+        can present a coherent error string."""
+        client = self._get_client()
+        body: dict[str, Any] = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt,
+                    "images": [image_b64],
+                }
+            ],
+            "stream": False,
+            "keep_alive": f"{self.keep_alive_seconds}s",
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+            },
+        }
+        # The default httpx timeout has read=None (unlimited) which is
+        # right for stream_chat. For vision we set an explicit read cap
+        # so a wedged daemon doesn't hang the audio loop indefinitely.
+        timeout = httpx.Timeout(connect=10.0, read=180.0, write=30.0, pool=10.0)
+        try:
+            response = await client.post("/api/chat", json=body, timeout=timeout)
+        except httpx.ConnectError as e:
+            raise OllamaConnectionError(
+                f"could not connect to Ollama at {self.endpoint}. "
+                "Is the daemon running? Start it with: ollama serve"
+            ) from e
+        if response.status_code == 404:
+            raise OllamaModelNotFoundError(
+                f"vision model {model!r} not found in Ollama. "
+                f"Run: ollama pull {model}"
+            )
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise OllamaError(
+                f"ollama returned HTTP {e.response.status_code}"
+            ) from e
+        data = response.json()
+        msg = data.get("message") or {}
+        return (msg.get("content") or "").strip()
+
     # -- internal --
 
     def _get_client(self) -> httpx.AsyncClient:

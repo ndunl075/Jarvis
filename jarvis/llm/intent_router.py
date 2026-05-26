@@ -292,22 +292,30 @@ def _build_patterns(
             ),
             lambda m: ToolIntent("launch_workspace", {}),
         ),
-        # Dashboard
+        # Dashboard. The "my/the" alternatives matter: without them the
+        # catch-all "open <anything>" pattern below would steal "open my
+        # dashboard" and route it to open_app.
         (
-            re.compile(r"^(?:show|open)\s+(?:the\s+)?dashboard$"),
+            re.compile(
+                r"^(?:show|open|bring\s+up)\s+(?:the\s+|my\s+)?dashboard$"
+            ),
             lambda m: ToolIntent("show_dashboard", {}),
         ),
         (
-            re.compile(r"^(?:show|open)\s+(?:my\s+)?system\s+stats$"),
+            re.compile(
+                r"^(?:show|open)\s+(?:me\s+)?(?:the\s+|my\s+)?system\s+stats$"
+            ),
             lambda m: ToolIntent("show_dashboard", {}),
         ),
         (
-            re.compile(r"^close\s+(?:the\s+)?dashboard$"),
+            re.compile(r"^close\s+(?:the\s+|my\s+)?dashboard$"),
             lambda m: ToolIntent("close_dashboard", {}),
         ),
         # Clipboard history
         (
-            re.compile(r"^(?:show|open)\s+(?:my\s+)?clipboard\s+history$"),
+            re.compile(
+                r"^(?:show|open|bring\s+up)\s+(?:the\s+|my\s+)?clipboard\s+history$"
+            ),
             lambda m: ToolIntent("show_clipboard_history", {}),
         ),
         (
@@ -315,11 +323,11 @@ def _build_patterns(
             lambda m: ToolIntent("show_clipboard_history", {}),
         ),
         (
-            re.compile(r"^close\s+(?:my\s+)?clipboard\s+history$"),
+            re.compile(r"^close\s+(?:the\s+|my\s+)?clipboard\s+history$"),
             lambda m: ToolIntent("close_clipboard_history", {}),
         ),
         (
-            re.compile(r"^clear\s+(?:my\s+)?clipboard\s+history$"),
+            re.compile(r"^clear\s+(?:the\s+|my\s+)?clipboard\s+history$"),
             lambda m: ToolIntent("clear_clipboard_history", {}),
         ),
         (
@@ -334,7 +342,9 @@ def _build_patterns(
         ),
         # Logs
         (
-            re.compile(r"^(?:show|open)\s+(?:the\s+)?logs?$"),
+            re.compile(
+                r"^(?:show|open|bring\s+up)\s+(?:me\s+)?(?:the\s+|my\s+)?logs?$"
+            ),
             lambda m: ToolIntent("show_logs", {}),
         ),
         (
@@ -342,29 +352,67 @@ def _build_patterns(
             lambda m: ToolIntent("show_logs", {}),
         ),
         (
-            re.compile(r"^close\s+(?:the\s+)?logs?$"),
+            re.compile(r"^close\s+(?:the\s+|my\s+)?logs?$"),
             lambda m: ToolIntent("close_logs", {}),
         ),
         # Help / capabilities
         (
-            re.compile(r"^(?:show|open)\s+(?:the\s+)?help$"),
+            re.compile(r"^(?:show|open)\s+(?:the\s+|my\s+)?help$"),
             lambda m: ToolIntent("open_help", {}),
         ),
         (
-            re.compile(r"^(?:show|open)\s+(?:my\s+)?capabilities$"),
+            re.compile(r"^(?:show|open)\s+(?:my\s+|the\s+)?capabilities$"),
             lambda m: ToolIntent("open_help", {}),
         ),
         (
             re.compile(r"^what\s+can\s+(?:you|i)\s+(?:do|say)\??$"),
             lambda m: ToolIntent("open_help", {}),
         ),
+        # See screen (vision). MUST precede the notes patterns below
+        # because "read my screen" would otherwise match the
+        # `read (.+) note` regex and route to read_note("screen").
+        # `look at` / `see` / `read` / `describe` cover the natural
+        # phrasings; the trailing "screen|display|monitor" anchors the
+        # tool so generic verbs (open, close, lock) keep their own
+        # patterns. Snappier than letting the LLM tool-call.
+        (
+            re.compile(
+                r"^(?:look\s+at|see|read|describe)\s+(?:my\s+|the\s+)?"
+                r"(?:screen|display|monitor)$"
+            ),
+            lambda m: ToolIntent("see_screen", {}),
+        ),
+        # "what's on my screen" / "what is on the screen" — the suffix
+        # is required so "what's" alone never triggers a tool call.
+        (
+            re.compile(
+                r"^what(?:'s|\s+is)\s+on\s+(?:my\s+|the\s+)?"
+                r"(?:screen|display|monitor)$"
+            ),
+            lambda m: ToolIntent("see_screen", {}),
+        ),
+        # "what do you see" / "what can you see" optionally followed by
+        # "on my screen". "see" here is the visual verb, not the tool
+        # name — kept separate from the look-at pattern above for clarity.
+        (
+            re.compile(
+                r"^what\s+(?:do|can)\s+you\s+see"
+                r"(?:\s+on\s+(?:my\s+|the\s+)?(?:screen|display|monitor))?$"
+            ),
+            lambda m: ToolIntent("see_screen", {}),
+        ),
+        # "can you see my screen" / "see my screen"
+        (
+            re.compile(r"^(?:can\s+you\s+)?see\s+my\s+screen$"),
+            lambda m: ToolIntent("see_screen", {}),
+        ),
         # Notes
         (
-            re.compile(r"^(?:open|show)\s+(?:my\s+)?notes$"),
+            re.compile(r"^(?:open|show|bring\s+up)\s+(?:my\s+|the\s+)?notes$"),
             lambda m: ToolIntent("open_notes", {}),
         ),
         (
-            re.compile(r"^close\s+(?:my\s+)?notes$"),
+            re.compile(r"^close\s+(?:my\s+|the\s+)?notes$"),
             lambda m: ToolIntent("close_notes", {}),
         ),
         (

@@ -15,6 +15,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -118,8 +119,59 @@ class ModelsTab(QWidget):
         form.addRow("LLM max tokens:", self.llm_max_tokens)
         form.addRow("LLM keep-alive:", self.llm_keep_alive)
 
+        # Vision: separate group because the model is unrelated to the
+        # conversational LLM above (vision-capable models are pulled
+        # separately and most users won't have one by default).
+        vision_box = QGroupBox("Vision (see-screen tool)")
+        vision_form = QFormLayout(vision_box)
+        vision_hint = QLabel(
+            "Used when you say \"see my screen\" / \"what's on my screen\". "
+            "Requires a multimodal Ollama model — pull one with "
+            "<code>ollama pull llava:7b</code>. Leave blank to disable."
+        )
+        vision_hint.setWordWrap(True)
+        vision_hint.setTextFormat(Qt.TextFormat.RichText)
+        vision_hint.setStyleSheet("color: #808080; font-size: 9pt;")
+        vision_form.addRow(vision_hint)
+
+        self.vision_model = QLineEdit(config.vision.model)
+        self.vision_model.setPlaceholderText("e.g. llava:7b, moondream, minicpm-v")
+        vision_form.addRow("Vision model:", self.vision_model)
+
+        self.vision_max_dim = QSpinBox()
+        self.vision_max_dim.setRange(320, 4096)
+        self.vision_max_dim.setSingleStep(64)
+        self.vision_max_dim.setValue(config.vision.max_image_dim)
+        self.vision_max_dim.setSuffix(" px")
+        self.vision_max_dim.setToolTip(
+            "Long-edge pixel cap before the screenshot is sent. "
+            "Lower = faster, less detail."
+        )
+        vision_form.addRow("Max image dimension:", self.vision_max_dim)
+
+        self.vision_max_tokens = QSpinBox()
+        self.vision_max_tokens.setRange(64, 4096)
+        self.vision_max_tokens.setSingleStep(64)
+        self.vision_max_tokens.setValue(config.vision.max_tokens)
+        vision_form.addRow("Vision max tokens:", self.vision_max_tokens)
+
+        self.vision_temperature = QSlider(Qt.Orientation.Horizontal)
+        self.vision_temperature.setRange(0, 200)
+        self.vision_temperature.setValue(int(round(config.vision.temperature * 100)))
+        self.vision_temperature_label = QLabel(f"{config.vision.temperature:.2f}")
+        v_temp_row = QHBoxLayout()
+        v_temp_row.addWidget(self.vision_temperature)
+        v_temp_row.addWidget(self.vision_temperature_label)
+        vision_form.addRow("Vision temperature:", v_temp_row)
+
+        self.vision_model.editingFinished.connect(self._on_vision_model)
+        self.vision_max_dim.valueChanged.connect(self._on_vision_max_dim)
+        self.vision_max_tokens.valueChanged.connect(self._on_vision_max_tokens)
+        self.vision_temperature.valueChanged.connect(self._on_vision_temperature)
+
         root = QVBoxLayout(self)
         root.addLayout(form)
+        root.addWidget(vision_box)
         root.addStretch(1)
 
         self.stt_size.currentTextChanged.connect(self._on_stt_size)
@@ -195,6 +247,24 @@ class ModelsTab(QWidget):
 
     def _on_llm_keep_alive(self, value: int) -> None:
         self._config.llm.keep_alive_seconds = value
+        self._persist()
+
+    def _on_vision_model(self) -> None:
+        self._config.vision.model = self.vision_model.text().strip()
+        self._persist()
+
+    def _on_vision_max_dim(self, value: int) -> None:
+        self._config.vision.max_image_dim = value
+        self._persist()
+
+    def _on_vision_max_tokens(self, value: int) -> None:
+        self._config.vision.max_tokens = value
+        self._persist()
+
+    def _on_vision_temperature(self, value: int) -> None:
+        f = value / 100.0
+        self._config.vision.temperature = f
+        self.vision_temperature_label.setText(f"{f:.2f}")
         self._persist()
 
     def _persist(self) -> None:

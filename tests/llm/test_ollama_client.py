@@ -212,6 +212,77 @@ async def test_warm_raises_model_not_found_on_404(mock_httpx):
     assert "ollama pull" in str(exc.value)
 
 
+# --- vision_chat (multimodal) ----------------------------------------
+
+
+async def test_vision_chat_posts_chat_with_image_and_per_call_model(mock_httpx):
+    """vision_chat ships the image as base64 in messages[0].images and
+    uses the per-call `model` argument (NOT self.model — the text and
+    vision models are typically different)."""
+    response = MagicMock()
+    response.status_code = 200
+    response.raise_for_status = MagicMock()
+    response.json = MagicMock(
+        return_value={"message": {"content": "A code editor is open, sir."}}
+    )
+    mock_httpx.post = AsyncMock(return_value=response)
+
+    c = OllamaClient(model="qwen2.5:7b-instruct")
+    result = await c.vision_chat(
+        model="llava:7b",
+        prompt="describe the screen",
+        image_b64="ZmFrZS1wbmctYnl0ZXM=",
+        max_tokens=256,
+        temperature=0.1,
+    )
+
+    assert result == "A code editor is open, sir."
+    mock_httpx.post.assert_awaited_once()
+    args, kwargs = mock_httpx.post.call_args
+    assert args[0] == "/api/chat"
+    body = kwargs["json"]
+    assert body["model"] == "llava:7b"  # per-call override, not text model
+    assert body["stream"] is False
+    assert body["messages"][0]["role"] == "user"
+    assert body["messages"][0]["content"] == "describe the screen"
+    assert body["messages"][0]["images"] == ["ZmFrZS1wbmctYnl0ZXM="]
+    assert body["options"]["temperature"] == 0.1
+    assert body["options"]["num_predict"] == 256
+
+
+async def test_vision_chat_raises_model_not_found_on_404(mock_httpx):
+    response = MagicMock()
+    response.status_code = 404
+    mock_httpx.post = AsyncMock(return_value=response)
+    c = OllamaClient()
+    with pytest.raises(OllamaModelNotFoundError) as exc:
+        await c.vision_chat(
+            model="llava:7b",
+            prompt="describe",
+            image_b64="abc",
+        )
+    assert "llava:7b" in str(exc.value)
+    assert "ollama pull llava:7b" in str(exc.value)
+
+
+async def test_vision_chat_raises_connection_error_with_hint(mock_httpx):
+    mock_httpx.post = AsyncMock(side_effect=httpx.ConnectError("refused"))
+    c = OllamaClient()
+    with pytest.raises(OllamaConnectionError, match="ollama serve"):
+        await c.vision_chat(model="llava:7b", prompt="x", image_b64="x")
+
+
+async def test_vision_chat_returns_empty_string_when_response_lacks_content(mock_httpx):
+    response = MagicMock()
+    response.status_code = 200
+    response.raise_for_status = MagicMock()
+    response.json = MagicMock(return_value={"message": {}})
+    mock_httpx.post = AsyncMock(return_value=response)
+    c = OllamaClient()
+    result = await c.vision_chat(model="llava:7b", prompt="x", image_b64="x")
+    assert result == ""
+
+
 # --- stream_chat: chunk assembly --------------------------------------
 
 

@@ -6,6 +6,91 @@ Technical details: `SPEC.md` · Build notes: `BUILD.md`
 
 ---
 
+## What Jarvis can do
+
+Everything below runs on your PC. Anything that reaches the internet is called out explicitly under [Security & privacy model](#security--privacy-model).
+
+**Core voice loop**
+- Wake-word activation ("Hey Jarvis") with configurable sensitivity
+- Voice activity detection + endpointing (silero-vad)
+- Speech-to-text on-device (faster-whisper, `tiny` / `base` / `small`)
+- Streaming text-to-speech (Piper, `en_GB-alan-medium` by default)
+- Barge-in: interrupt Jarvis mid-response by speaking
+- Push-to-talk hotkey (alternative to wake word)
+- Local LLM via Ollama with streaming, tool calling, and conversation history
+- Jarvis persona (calm, dryly witty, British, addresses you as "sir")
+- Stop / cancel words: "stop", "shut up", "never mind", "be quiet", "that's enough"
+
+**Modes & state**
+- Active / Muted / Sleeping modes (tray + hotkeys + voice)
+- Sleep mode evicts the LLM from VRAM so your GPU is free
+- Idle / Listening / Thinking / Speaking states drive the overlay orb
+
+**Apps & system control**
+- Open any app by name (Start menu + Microsoft Store via `shell:AppsFolder` URIs)
+- Close an app by name
+- Launch a Steam game by title
+- **Open your whole workspace** — every app you configure, in one command
+- Open a URL or website
+- Take a screenshot (saved to `~\Pictures\Jarvis_Screenshots` and copied to clipboard)
+- **See your screen** — multimodal vision via local Ollama: "what's on my screen", "look at my screen", "describe my screen". Requires pulling a vision model (`ollama pull llava:7b`); pick it in Settings → Models → Vision.
+- Lock the screen
+- Volume up / down / mute / unmute
+- Type dictated text into the currently focused window
+- Report CPU and memory usage out loud
+- "What time is it" answered locally with zero LLM latency
+- First-run tutorial (mic test, wake-word test, sample command)
+
+**Web, search & research**
+- Google search by voice ("search…", "google…", "search up…", "search for…")
+- **Quick research panel** — DuckDuckGo snippets summarized by your local Ollama model
+- "Read more" / "continue" / "copy that" follow-ups inside the research panel
+- **Deep research** (Comet-style, fully local) — planner + worker two-model split, sub-question decomposition, diverse queries, full-page fetch, gap-fill, TOC, executive overview, numbered citations, markdown report saved per session
+- Pause / resume / close / delete deep research sessions (one or all)
+- Optional **Ultra mode** for deep research (opt-in Brave + Groq + Jina keys)
+- **Weather** for your saved location or any place by name (Open-Meteo, no key)
+
+**Notes (voice-captured markdown)**
+- "Take a note about…" / "jot this down…" / "write this down…" — saves a new `.md` file
+- "Add this to my meeting note: …" appends to the matching note
+- "Read my groceries note" reads it aloud
+- "Delete the groceries note" or "delete this note"
+- Notes panel with inline markdown editing, auto-save, and folder shortcut
+
+**Music & media**
+- "Play [song / artist / genre]" — top YouTube result with autoplay
+- Open YouTube directly
+
+**Clipboard**
+- Read or clear the current clipboard contents
+- **Clipboard history** panel — capped, deduplicated, persisted, credential-payload aware
+- "Paste my last copy" / "paste item 3" reloads the chosen entry onto the clipboard
+- Pin items so they survive `clear history`
+
+**UI surfaces**
+- System tray icon with Active / Muted / Sleeping variants and full menu
+- Floating overlay orb (listening pulse, thinking shimmer, speaking waveform)
+- **Live dashboard HUD** — mode, state, uptime, CPU/RAM meters, mic level, models in use, foreground app, note + research counts
+- **Help panel** ("what can you do") with live search and plain-English examples
+- **Command palette** (`Ctrl+Shift+P`, rebindable) — keyboard launcher for any command, also accepts free-form phrases
+- **Live log viewer** — tails `jarvis.log`, level filter, search, color-coded, opens file
+- Settings window: General · Voice · Models · Tools · Hotkeys · Help · About
+
+**Extensibility**
+- MCP-compatible tool registry; add external MCP servers from Settings → Tools
+- Hybrid intent router: regex pattern layer for snap commands, LLM tool-calling for everything else
+- Compound intents ("open Spotify **and** tell me the weather")
+- Per-tool enable/disable, configurable workspace app list, configurable hotkeys
+
+**Ops & packaging**
+- Portable Windows zip build via PyInstaller
+- Structured rotating logs at `%APPDATA%\Jarvis\logs\jarvis.log` (10 MB × 5)
+- Per-interaction correlation ID linking wake → STT → LLM → TTS in logs
+- Versioned config schema with migration hook
+- No analytics, no telemetry, no crash reporting
+
+---
+
 ## Download (Windows)
 
 **[Download Jarvis for Windows (zip)](https://github.com/ndunl075/Jarvis/releases/latest/download/Jarvis-0.0.1-windows-x64.zip)**

@@ -215,16 +215,28 @@ def test_normalize(raw: str, expected: str):
         # dashboard
         ("show dashboard", "show_dashboard", {}),
         ("open the dashboard", "show_dashboard", {}),
+        # regression: "open my dashboard" used to be stolen by the
+        # catch-all `open <X>` pattern and routed to open_app.
+        ("open my dashboard", "show_dashboard", {}),
+        ("show my dashboard", "show_dashboard", {}),
+        ("bring up dashboard", "show_dashboard", {}),
+        ("show system stats", "show_dashboard", {}),
+        ("show me my system stats", "show_dashboard", {}),
         ("close dashboard", "close_dashboard", {}),
+        ("close the dashboard", "close_dashboard", {}),
+        ("close my dashboard", "close_dashboard", {}),
         # help
         ("what can you do", "open_help", {}),
         ("what can i say", "open_help", {}),
         ("show help", "open_help", {}),
+        ("open my help", "open_help", {}),
         ("show my capabilities", "open_help", {}),
         # notes
         ("open my notes", "open_notes", {}),
         ("show notes", "open_notes", {}),
+        ("bring up my notes", "open_notes", {}),
         ("close notes", "close_notes", {}),
+        ("close my notes", "close_notes", {}),
         ("take a note about the meeting being moved", "take_note", {"content": "the meeting being moved"}),
         ("jot down buy milk", "take_note", {"content": "buy milk"}),
         ("write this down: project Phoenix kicks off Monday", "take_note", {"content": "project phoenix kicks off monday"}),
@@ -235,16 +247,23 @@ def test_normalize(raw: str, expected: str):
         # clipboard history
         ("show clipboard history", "show_clipboard_history", {}),
         ("show my clipboard history", "show_clipboard_history", {}),
+        ("open my clipboard history", "show_clipboard_history", {}),
+        ("bring up clipboard history", "show_clipboard_history", {}),
         ("what have i copied", "show_clipboard_history", {}),
         ("close clipboard history", "close_clipboard_history", {}),
+        ("close my clipboard history", "close_clipboard_history", {}),
         ("clear my clipboard history", "clear_clipboard_history", {}),
+        ("clear the clipboard history", "clear_clipboard_history", {}),
         ("paste my last copy", "paste_clipboard_item", {"index": 1}),
         ("paste item 3", "paste_clipboard_item", {"index": 3}),
         # logs
         ("show logs", "show_logs", {}),
         ("open the log", "show_logs", {}),
+        ("open my logs", "show_logs", {}),
+        ("show me the logs", "show_logs", {}),
         ("show errors", "show_logs", {}),
         ("close logs", "close_logs", {}),
+        ("close the log", "close_logs", {}),
         # research panel
         ("research quantum computing", "research", {"query": "quantum computing"}),
         ("look up black holes", "research", {"query": "black holes"}),
@@ -256,6 +275,24 @@ def test_normalize(raw: str, expected: str):
         ("launch workspace", "launch_workspace", {}),
         ("start my workspace", "launch_workspace", {}),
         ("jarvis open my workspace", "launch_workspace", {}),
+        # see screen (vision)
+        ("look at my screen", "see_screen", {}),
+        ("look at the screen", "see_screen", {}),
+        ("see my screen", "see_screen", {}),
+        ("can you see my screen", "see_screen", {}),
+        ("read my screen", "see_screen", {}),
+        ("describe my screen", "see_screen", {}),
+        ("describe the display", "see_screen", {}),
+        ("what's on my screen", "see_screen", {}),
+        ("what is on the screen", "see_screen", {}),
+        ("what do you see", "see_screen", {}),
+        ("what can you see", "see_screen", {}),
+        ("what do you see on my screen", "see_screen", {}),
+        ("what can you see on the screen", "see_screen", {}),
+        # filler-stripped: "hey jarvis, what's on my screen"
+        ("hey jarvis what's on my screen", "see_screen", {}),
+        # filler + can-you: "can you see my screen" -> "see my screen"
+        ("hey jarvis can you see my screen", "see_screen", {}),
     ],
 )
 async def test_pattern_yields_correct_tool_intent(

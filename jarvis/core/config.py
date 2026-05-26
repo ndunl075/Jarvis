@@ -33,7 +33,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-CURRENT_SCHEMA_VERSION = 19
+CURRENT_SCHEMA_VERSION = 20
 
 # Prompts from prior schema versions — used by migrations to detect and
 # replace the old default without overwriting user-customised prompts.
@@ -348,6 +348,34 @@ class WorkspaceConfig(_Base):
     apps: list[WorkspaceAppEntry] = Field(default_factory=_default_workspace_apps)
 
 
+class VisionConfig(_Base):
+    """Settings for the `see_screen` tool (multimodal Ollama call).
+
+    The vision model is independent from the conversational `llm.model`
+    because text-only models (qwen2.5:7b-instruct, etc.) cannot accept
+    images. Users must `ollama pull llava:7b` (or another vision-capable
+    model) for the feature to work. Empty `model` disables see_screen
+    cleanly (the tool returns a clear "no vision model configured" message
+    instead of failing late inside Ollama).
+    """
+
+    # llava:7b is a 4-5 GB int4 multimodal model that runs on CPU and
+    # ships with the Ollama default registry. moondream / minicpm-v are
+    # other reasonable defaults; we don't try to pick one for the user.
+    model: str = "llava:7b"
+    # Long-edge pixel cap before we ship the image to Ollama. Vision
+    # models do their own internal resize; this cap keeps the HTTP body
+    # small (1280 px PNG is typically <500 KB) and the prompt-eval time
+    # bounded. Lowering to 640 makes weak GPUs much snappier at a small
+    # cost to text legibility in the screenshot.
+    max_image_dim: int = Field(default=1280, ge=320, le=4096)
+    max_tokens: int = Field(default=512, ge=64, le=4096)
+    # Lower temperature than chat default (0.7) — vision descriptions
+    # benefit from determinism so repeated calls describe the same UI
+    # consistently rather than reinventing nouns each time.
+    temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+
+
 class WeatherConfig(_Base):
     # No hard-coded default coordinates: the weather tool auto-detects the
     # user's approximate location via ipapi.co on first use when both
@@ -376,6 +404,7 @@ class JarvisConfig(_Base):
     research: ResearchConfig = Field(default_factory=ResearchConfig)
     workspace: WorkspaceConfig = Field(default_factory=WorkspaceConfig)
     weather: WeatherConfig = Field(default_factory=WeatherConfig)
+    vision: VisionConfig = Field(default_factory=VisionConfig)
     mcp_servers: list[MCPServerConfig] = Field(default_factory=_default_mcp_servers)
 
 
@@ -683,6 +712,26 @@ def _migrate_v18_to_v19(data: dict) -> dict:
     return data
 
 
+def _migrate_v19_to_v20(data: dict) -> dict:
+    """Schema v20: introduce vision section for the see_screen tool.
+
+    Existing v19 configs gain the section with the shipping defaults
+    (llava:7b vision model, 1280 px long edge, 512 max tokens, temp 0.2).
+    Users who haven't pulled llava:7b will hear a clear "no vision model
+    pulled" message when they first say "see my screen" — better than
+    autoselecting the user's main text-only model and getting an opaque
+    Ollama error mid-tool-call.
+    """
+    data.setdefault("vision", {
+        "model": "llava:7b",
+        "max_image_dim": 1280,
+        "max_tokens": 512,
+        "temperature": 0.2,
+    })
+    data["schema_version"] = 20
+    return data
+
+
 def _migrate_v17_to_v18(data: dict) -> dict:
     """Schema v18: privacy reset for migration-stamped weather coordinates.
 
@@ -723,6 +772,7 @@ MIGRATIONS: dict[int, Migration] = {
     16: _migrate_v16_to_v17,
     17: _migrate_v17_to_v18,
     18: _migrate_v18_to_v19,
+    19: _migrate_v19_to_v20,
 }
 
 

@@ -264,6 +264,21 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                 examples=("take a screenshot", "screenshot"),
             ),
             Capability(
+                name="See your screen",
+                description=(
+                    "Captures your screen and describes what's on it "
+                    "using a vision-capable local LLM. Requires a "
+                    "multimodal Ollama model (e.g. llava:7b). Set the "
+                    "model under Settings → Models → Vision."
+                ),
+                examples=(
+                    "what's on my screen",
+                    "look at my screen",
+                    "describe my screen",
+                    "what do you see",
+                ),
+            ),
+            Capability(
                 name="Lock the screen",
                 description="Locks Windows just like Win+L.",
                 examples=("lock the screen", "lock my pc"),

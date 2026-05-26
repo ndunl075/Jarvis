@@ -519,7 +519,7 @@ def run() -> int:
         inactivity_timeout_seconds=cfg.llm.inactivity_timeout_seconds,
     )
     registry = ToolRegistry(cfg.tools)
-    setup_local_tools(registry, config=cfg)
+    setup_local_tools(registry, config=cfg, ollama_client=ollama)
     # Research tools are wired later (step 12) after the Qt app and
     # ResearchPanel are created, because their callbacks reference the panel.
     mcp_manager = MCPManager(registry)
