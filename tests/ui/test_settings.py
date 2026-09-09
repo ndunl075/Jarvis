@@ -325,6 +325,7 @@ def test_tools_tab_populates_checkboxes_for_phase_4_set(qapp):
         "report_cpu_and_memory_percentages",
         "research",
         "screenshot",
+        "see_screen",
         "show_clipboard_history",
         "show_dashboard",
         "show_logs",
@@ -377,10 +378,11 @@ def test_hotkeys_tab_populates_capture_buttons_from_config(qapp):
 
 
 def test_hotkeys_tab_clear_disabled_for_required_bindings(qapp):
-    """mute and open_settings have can_be_empty=False; only push_to_talk's
-    Clear button is enabled. Test via the form: walk each row, find the
-    QPushButton labelled 'Clear', confirm enabled state matches."""
-    from PySide6.QtWidgets import QHBoxLayout, QPushButton
+    """mute and open_settings have can_be_empty=False; push_to_talk and
+    command_palette have can_be_empty=True, so only their Clear buttons
+    are enabled. Test via the form: walk each row, find the QPushButton
+    labelled 'Clear', confirm enabled state matches."""
+    from PySide6.QtWidgets import QPushButton
     cfg = _cfg()
     tab = HotkeysTab(config=cfg, on_change=lambda: None)
     # Collect every Clear button child.
@@ -388,8 +390,8 @@ def test_hotkeys_tab_clear_disabled_for_required_bindings(qapp):
         b for b in tab.findChildren(QPushButton) if b.text() == "Clear"
     ]
     enabled_count = sum(1 for b in clears if b.isEnabled())
-    # Only push_to_talk can be cleared.
-    assert enabled_count == 1
+    # Only push_to_talk and command_palette can be cleared.
+    assert enabled_count == 2
 
 
 def test_hotkeys_tab_capture_writes_back_and_persists(qapp):

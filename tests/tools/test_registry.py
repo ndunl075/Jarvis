@@ -16,11 +16,10 @@ from jarvis.tools.registry import (
     TOOL_NAME_REGEX,
     EmptyArgs,
     Tool,
-    ToolNameCollision,
+    ToolNameCollisionError,
     ToolRegistry,
     ToolResult,
 )
-
 
 # --- fakes -------------------------------------------------------------
 
@@ -113,12 +112,12 @@ def test_get_unknown_returns_none():
 
 
 def test_register_duplicate_name_raises_collision():
-    """ToolNameCollision lets the caller decide policy. Built-ins
+    """ToolNameCollisionError lets the caller decide policy. Built-ins
     register first at startup; MCP wrappers catch and drop the single
     colliding tool from the offending server (no silent overwrite)."""
     reg = ToolRegistry(ToolsConfig())
     reg.register(_EchoTool())
-    with pytest.raises(ToolNameCollision):
+    with pytest.raises(ToolNameCollisionError):
         reg.register(_EchoTool())
 
 
@@ -139,7 +138,7 @@ def test_register_built_in_then_mcp_clobber_is_blocked():
         async def execute(self, args: _EchoArgs) -> ToolResult:
             return ToolResult(success=True, output="from-mcp")
 
-    with pytest.raises(ToolNameCollision):
+    with pytest.raises(ToolNameCollisionError):
         reg.register(_MCPEcho())
     # Built-in is intact.
     assert reg.get("echo") is builtin
@@ -336,7 +335,7 @@ def test_setup_local_tools_idempotent_into_fresh_registry():
     from jarvis.tools import setup_local_tools
     reg = ToolRegistry(ToolsConfig())
     setup_local_tools(reg)
-    with pytest.raises(ToolNameCollision):
+    with pytest.raises(ToolNameCollisionError):
         setup_local_tools(reg)
 
 

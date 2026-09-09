@@ -8,7 +8,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from jarvis.tools.local.type_into_active_window import TypeIntoActiveWindowArgs, TypeIntoActiveWindowTool
+from jarvis.tools.local.type_into_active_window import (
+    TypeIntoActiveWindowArgs,
+    TypeIntoActiveWindowTool,
+)
 
 
 def _fake_pyautogui() -> tuple[types.ModuleType, MagicMock]:

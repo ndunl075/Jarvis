@@ -11,12 +11,9 @@ from unittest.mock import patch
 
 import pytest
 
-from jarvis.core.events import ConversationalStateChanged, EventBus
+from jarvis.core.events import EventBus
 from jarvis.core.state_machine import ConversationalState, StateMachine
 from jarvis.ui.overlay import (
-    PALETTE_CYAN,
-    AmplitudeLatch,
-    OverlayOrb,
     _BREATH_HZ,
     _EMA_KEEP,
     _EMA_NEW,
@@ -27,9 +24,11 @@ from jarvis.ui.overlay import (
     _RING_TILT_OFFSETS,
     _RING_Y_SCALES,
     _STATE_TARGETS,
+    PALETTE_CYAN,
+    AmplitudeLatch,
+    OverlayOrb,
     make_amplitude_callback,
 )
-
 
 # --- AmplitudeLatch (no Qt needed) -------------------------------------
 
@@ -417,7 +416,6 @@ def test_ring_effective_speeds_vary_across_phases():
     from jarvis.ui.overlay import _ring_effective_speeds
 
     base = 0.4
-    import math
     samples = [
         _ring_effective_speeds(phase, base)[0]
         for phase in (i * 0.5 for i in range(100))

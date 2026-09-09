@@ -26,12 +26,11 @@ import os
 import re
 import shutil
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
-
+from pydantic import BaseModel, ConfigDict
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -75,7 +74,7 @@ def _note_path(note_id: str) -> Path:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _slugify(text: str) -> str:

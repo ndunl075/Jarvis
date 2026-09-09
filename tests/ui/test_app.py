@@ -25,7 +25,6 @@ from jarvis.core.config import LifecycleConfig
 from jarvis.core.events import EventBus
 from jarvis.core.state_machine import StateMachine
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -94,6 +93,12 @@ def _make_mcp_manager():
     return m
 
 
+def _make_registry():
+    """_audio_main only passes the registry through to the ConfigChanged
+    handler, so a bare mock is enough here."""
+    return MagicMock()
+
+
 # ---------------------------------------------------------------------------
 # _audio_main: happy path
 # ---------------------------------------------------------------------------
@@ -107,7 +112,7 @@ async def test_audio_main_happy_path():
     tts = _make_tts()
     stt = _make_stt()
     wake_word = _make_wake_word()
-    bus = EventBus(loop=asyncio.get_event_loop())
+    bus = EventBus(loop=asyncio.get_running_loop())
     sm = StateMachine()
     coordinator = _make_coordinator()
     lifecycle_cfg = LifecycleConfig()
@@ -116,7 +121,14 @@ async def test_audio_main_happy_path():
     holder: list[str | None] = [None]
     done = threading.Event()
 
-    await _audio_main(lm, pipeline, ollama, tts, stt, wake_word, bus, sm, coordinator, lifecycle_cfg, stop_event, holder, done, source=_make_source(), mcp_manager=_make_mcp_manager(), mcp_servers=[])
+    await _audio_main(
+        lm, pipeline, ollama, tts, stt, wake_word, bus, sm, coordinator,
+        lifecycle_cfg, stop_event, holder, done,
+        source=_make_source(),
+        mcp_manager=_make_mcp_manager(),
+        mcp_servers=[],
+        registry=_make_registry(),
+    )
 
     lm.load_all.assert_awaited_once()
     ollama.warm.assert_awaited_once()
@@ -144,7 +156,7 @@ async def test_audio_main_load_failure_sets_error_skips_pipeline():
     tts = _make_tts()
     stt = _make_stt()
     wake_word = _make_wake_word()
-    bus = EventBus(loop=asyncio.get_event_loop())
+    bus = EventBus(loop=asyncio.get_running_loop())
     sm = StateMachine()
     coordinator = _make_coordinator()
     lifecycle_cfg = LifecycleConfig()
@@ -152,7 +164,14 @@ async def test_audio_main_load_failure_sets_error_skips_pipeline():
     holder: list[str | None] = [None]
     done = threading.Event()
 
-    await _audio_main(lm, pipeline, ollama, tts, stt, wake_word, bus, sm, coordinator, lifecycle_cfg, stop_event, holder, done, source=_make_source(), mcp_manager=_make_mcp_manager(), mcp_servers=[])
+    await _audio_main(
+        lm, pipeline, ollama, tts, stt, wake_word, bus, sm, coordinator,
+        lifecycle_cfg, stop_event, holder, done,
+        source=_make_source(),
+        mcp_manager=_make_mcp_manager(),
+        mcp_servers=[],
+        registry=_make_registry(),
+    )
 
     assert done.is_set()
     assert holder[0] is not None
@@ -174,7 +193,7 @@ async def test_audio_main_ollama_warmup_failure_is_non_fatal():
     tts = _make_tts()
     stt = _make_stt()
     wake_word = _make_wake_word()
-    bus = EventBus(loop=asyncio.get_event_loop())
+    bus = EventBus(loop=asyncio.get_running_loop())
     sm = StateMachine()
     coordinator = _make_coordinator()
     lifecycle_cfg = LifecycleConfig()
@@ -183,7 +202,14 @@ async def test_audio_main_ollama_warmup_failure_is_non_fatal():
     holder: list[str | None] = [None]
     done = threading.Event()
 
-    await _audio_main(lm, pipeline, ollama, tts, stt, wake_word, bus, sm, coordinator, lifecycle_cfg, stop_event, holder, done, source=_make_source(), mcp_manager=_make_mcp_manager(), mcp_servers=[])
+    await _audio_main(
+        lm, pipeline, ollama, tts, stt, wake_word, bus, sm, coordinator,
+        lifecycle_cfg, stop_event, holder, done,
+        source=_make_source(),
+        mcp_manager=_make_mcp_manager(),
+        mcp_servers=[],
+        registry=_make_registry(),
+    )
 
     assert done.is_set()
     assert holder[0] is not None
@@ -217,7 +243,7 @@ async def test_audio_main_unload_after_pipeline_stop():
     tts = _make_tts()
     stt = _make_stt()
     wake_word = _make_wake_word()
-    bus = EventBus(loop=asyncio.get_event_loop())
+    bus = EventBus(loop=asyncio.get_running_loop())
     sm = StateMachine()
     coordinator = _make_coordinator()
     lifecycle_cfg = LifecycleConfig()
@@ -226,7 +252,14 @@ async def test_audio_main_unload_after_pipeline_stop():
     holder: list[str | None] = [None]
     done = threading.Event()
 
-    await _audio_main(lm, pipeline, ollama, tts, stt, wake_word, bus, sm, coordinator, lifecycle_cfg, stop_event, holder, done, source=_make_source(), mcp_manager=_make_mcp_manager(), mcp_servers=[])
+    await _audio_main(
+        lm, pipeline, ollama, tts, stt, wake_word, bus, sm, coordinator,
+        lifecycle_cfg, stop_event, holder, done,
+        source=_make_source(),
+        mcp_manager=_make_mcp_manager(),
+        mcp_servers=[],
+        registry=_make_registry(),
+    )
 
     assert order == ["pipeline_stop", "unload_all"]
 

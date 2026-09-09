@@ -17,16 +17,16 @@ from urllib.parse import quote_plus
 
 import pytest
 
-from jarvis.llm.conversation import Conversation
 from jarvis.core.config import ToolsConfig
+from jarvis.llm.conversation import Conversation
 from jarvis.llm.intent_router import (
+    _STOP_PATTERN,
     CompoundIntent,
     IntentRouter,
     SpeakIntent,
     StopIntent,
     ToolIntent,
     _normalize,
-    _STOP_PATTERN,
     execute_intent,
 )
 from jarvis.llm.ollama_client import ChatChunk
@@ -85,7 +85,7 @@ class _Conv:
         # add_user_turn, each assistant via add_assistant_turn; the
         # tests that use this rely on the recorded order matching the
         # actual call sequence.
-        for u, a in zip(self.user_turns, self.assistant_turns):
+        for u, a in zip(self.user_turns, self.assistant_turns, strict=False):
             msgs.append({"role": "user", "content": u})
             msgs.append({"role": "assistant", "content": a})
         # Trailing user turn with no assistant response yet.
@@ -237,13 +237,25 @@ def test_normalize(raw: str, expected: str):
         ("bring up my notes", "open_notes", {}),
         ("close notes", "close_notes", {}),
         ("close my notes", "close_notes", {}),
-        ("take a note about the meeting being moved", "take_note", {"content": "the meeting being moved"}),
+        (
+            "take a note about the meeting being moved",
+            "take_note",
+            {"content": "the meeting being moved"},
+        ),
         ("jot down buy milk", "take_note", {"content": "buy milk"}),
-        ("write this down: project Phoenix kicks off Monday", "take_note", {"content": "project phoenix kicks off monday"}),
+        (
+            "write this down: project Phoenix kicks off Monday",
+            "take_note",
+            {"content": "project phoenix kicks off monday"},
+        ),
         ("read this note", "read_note", {"title": ""}),
         ("delete this note", "delete_note", {"title": ""}),
         ("delete the groceries note", "delete_note", {"title": "groceries"}),
-        ("add this to my meeting note: agenda finalized", "append_to_note", {"title": "meeting", "content": "agenda finalized"}),
+        (
+            "add this to my meeting note: agenda finalized",
+            "append_to_note",
+            {"title": "meeting", "content": "agenda finalized"},
+        ),
         # clipboard history
         ("show clipboard history", "show_clipboard_history", {}),
         ("show my clipboard history", "show_clipboard_history", {}),

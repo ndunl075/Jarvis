@@ -17,7 +17,6 @@ from jarvis.core.events import EventBus, ModeChanged
 from jarvis.core.state_machine import Mode, StateMachine
 from jarvis.ui.tray import TrayIcon, _format_hotkey, _with_shortcut
 
-
 # --- helpers -------------------------------------------------------------
 
 

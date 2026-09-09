@@ -13,7 +13,7 @@ Design rationale (Phase 4 Task 1 design note, approved):
   ToolResult(success=False, error=...), never as exceptions, so the
   router can speak the failure back without try/except plumbing.
 
-- Name collisions raise ToolNameCollision. Built-in tools register first
+- Name collisions raise ToolNameCollisionError. Built-in tools register first
   at startup so they always win; MCP wrappers catch the exception and
   drop the colliding tool from the offending server only. No silent
   overwrites — a clobber on a tool the LLM trusts is a footgun.
@@ -95,7 +95,7 @@ class Tool(Protocol):
     async def execute(self, args: BaseModel) -> ToolResult: ...
 
 
-class ToolNameCollision(ValueError):
+class ToolNameCollisionError(ValueError):
     """Raised by ToolRegistry.register when a tool with the same name is
     already registered. Caller decides policy: built-ins (which register
     first) treat this as a programming bug; MCP wrappers catch + log +
@@ -113,11 +113,11 @@ class ToolRegistry:
     # -- registration -------------------------------------------------
 
     def register(self, tool: Tool) -> None:
-        """Add a tool. Raises ToolNameCollision if `tool.name` is taken.
+        """Add a tool. Raises ToolNameCollisionError if `tool.name` is taken.
         See module docstring on the no-silent-overwrite policy."""
         if tool.name in self._tools:
             existing = type(self._tools[tool.name]).__name__
-            raise ToolNameCollision(
+            raise ToolNameCollisionError(
                 f"tool name {tool.name!r} already registered "
                 f"(existing: {existing})"
             )

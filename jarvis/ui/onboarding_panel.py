@@ -20,10 +20,8 @@ import logging
 from collections.abc import Callable
 
 from PySide6.QtCore import (
-    QMetaObject,
     Qt,
     QTimer,
-    Q_ARG,
     Signal,
     Slot,
 )

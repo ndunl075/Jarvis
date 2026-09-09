@@ -23,7 +23,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -118,7 +118,7 @@ class ClipboardHistory:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ClipboardHistory":
+    def from_dict(cls, data: dict) -> ClipboardHistory:
         out = cls()
         for entry in data.get("items", []) or []:
             text = entry.get("text", "")
@@ -135,7 +135,7 @@ class ClipboardHistory:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def history_path() -> Path:

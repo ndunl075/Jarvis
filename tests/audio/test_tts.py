@@ -1307,6 +1307,7 @@ async def test_output_fallback_to_secondary_device_on_primary_failure(
 ):
     """Primary device fails → secondary succeeds → warning logged, NonFatalError published."""
     from unittest.mock import MagicMock
+
     from jarvis.core.events import EventBus, NonFatalError
 
     devices = [
@@ -1398,6 +1399,7 @@ async def test_output_primary_succeeds_no_fallback_triggered(
 ):
     """Primary device opens on first try — no fallback code path, no warning."""
     from unittest.mock import MagicMock
+
     from jarvis.core.events import EventBus
 
     devices = [

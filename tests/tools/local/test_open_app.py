@@ -116,7 +116,10 @@ async def test_aliased_app_prefers_installed_index_over_bare_command():
 
     app = InstalledApp(
         display_name="Spotify",
-        launch_command=r"C:\Users\me\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Spotify.lnk",
+        launch_command=(
+            r"C:\Users\me\AppData\Roaming\Microsoft\Windows"
+            r"\Start Menu\Programs\Spotify.lnk"
+        ),
     )
     with (
         patch("jarvis.tools.local.open_app.winplat.launch_path") as launch_path,

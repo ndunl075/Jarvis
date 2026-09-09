@@ -13,7 +13,6 @@ from __future__ import annotations
 import queue
 from unittest.mock import MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # _extract_sources
 # ---------------------------------------------------------------------------
@@ -117,7 +116,7 @@ def test_panel_initially_hidden(qapp):
 
 
 def test_panel_width_default(qapp):
-    from jarvis.ui.research_panel import ResearchPanel, _DEFAULT_PANEL_WIDTH
+    from jarvis.ui.research_panel import _DEFAULT_PANEL_WIDTH, ResearchPanel
 
     panel = ResearchPanel()
     assert panel.width() == _DEFAULT_PANEL_WIDTH

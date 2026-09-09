@@ -46,14 +46,12 @@ from jarvis.tools.local.deep_research_store import (
     append_report,
     format_references_markdown,
     format_section_markdown,
-    read_report,
     save_state,
     write_report,
 )
 from jarvis.tools.local.research_llm import chat_once
 from jarvis.tools.local.research_search import SearchProvider, fetch_search_snippets
 from jarvis.tools.local.web_page_fetch import fetch_page_text
-from jarvis.tools.local.web_search_fetch import format_snippets_for_prompt
 
 log = logging.getLogger(__name__)
 
@@ -355,7 +353,7 @@ def extract_claims(
 
 def _domain(url: str) -> str:
     try:
-        return urlparse(url).netloc.lower().lstrip("www.")
+        return urlparse(url).netloc.lower().removeprefix("www.")
     except Exception:
         return url
 
@@ -504,8 +502,13 @@ def _render_full_report(state: DeepResearchState, overview: str = "") -> str:
 # ---------------------------------------------------------------------------
 
 
-class DeepResearchPaused(Exception):
-    """Raised when the user pauses mid-run (not an error)."""
+class DeepResearchPaused(Exception):  # noqa: N818 - control-flow signal, not an error
+    """Raised when the user pauses mid-run (not an error).
+
+    Deliberately not suffixed `Error`: like StopIteration, this unwinds the
+    run so the caller can checkpoint and resume, and every catch site treats
+    it as success. Naming it `...Error` would misrepresent it.
+    """
 
     def __init__(self, session_id: str) -> None:
         self.session_id = session_id

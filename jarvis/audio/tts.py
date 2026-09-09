@@ -84,8 +84,8 @@ import queue
 import re
 import threading
 import time
-from fractions import Fraction
 from collections.abc import AsyncIterator, Callable, Iterable
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
