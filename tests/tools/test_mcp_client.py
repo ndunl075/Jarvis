@@ -11,9 +11,11 @@ from __future__ import annotations
 import sys
 import types
 from contextlib import asynccontextmanager
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic import BaseModel
 
 from jarvis.core.config import MCPServerConfig, ToolsConfig
 from jarvis.tools.mcp_client import (
@@ -26,7 +28,7 @@ from jarvis.tools.mcp_client import (
     _sanitize_tool_name,
     resolve_trayce_endpoint,
 )
-from jarvis.tools.registry import ToolRegistry, ToolResult
+from jarvis.tools.registry import EmptyArgs, Tool, ToolRegistry, ToolResult
 
 # --- credential reading ------------------------------------------------
 
@@ -323,6 +325,17 @@ def _registry() -> ToolRegistry:
     return ToolRegistry(ToolsConfig())
 
 
+def _registered(reg: ToolRegistry, name: str) -> Tool:
+    """`ToolRegistry.get` returns `Tool | None`.
+
+    Every caller below has just registered the tool it asks for, so the
+    None arm is unreachable; this is the narrow cast that says so. A tool
+    that really went missing still fails on the next attribute access,
+    exactly as it did before.
+    """
+    return cast(Tool, reg.get(name))
+
+
 @pytest.mark.asyncio
 async def test_add_server_registers_prefixed_tools(monkeypatch):
     session = _FakeSession(tools=[
@@ -401,13 +414,12 @@ async def test_add_server_drops_colliding_tool(monkeypatch):
     reg = _registry()
 
     class _Local:
-        name = "trayce_search_context"
-        description = "local"
-        from jarvis.tools.registry import EmptyArgs as _EmptyArgs
-        args_schema = _EmptyArgs
-        requires_confirmation = False
+        name: str = "trayce_search_context"
+        description: str = "local"
+        args_schema: type[BaseModel] = EmptyArgs
+        requires_confirmation: bool = False
 
-        async def execute(self, args):  # pragma: no cover
+        async def execute(self, args: BaseModel) -> ToolResult:  # pragma: no cover
             return ToolResult(success=True)
 
     reg.register(_Local())
@@ -503,8 +515,8 @@ async def test_server_confirmation_flag_reaches_every_adapted_tool(monkeypatch):
         name="srv", url="http://x/mcp", requires_confirmation=True,
     ))
 
-    assert reg.get("srv_a").requires_confirmation is True
-    assert reg.get("srv_b").requires_confirmation is True
+    assert _registered(reg, "srv_a").requires_confirmation is True
+    assert _registered(reg, "srv_b").requires_confirmation is True
 
 
 @pytest.mark.asyncio
@@ -518,7 +530,7 @@ async def test_server_confirmation_defaults_off(monkeypatch):
 
     await mgr.add_server(MCPServerConfig(name="srv", url="http://x/mcp"))
 
-    assert reg.get("srv_a").requires_confirmation is False
+    assert _registered(reg, "srv_a").requires_confirmation is False
 
 
 @pytest.mark.asyncio
@@ -534,14 +546,14 @@ async def test_reload_reconnects_when_confirmation_setting_changes(monkeypatch):
         MCPServerConfig(name="srv", url="http://a/mcp", enabled=True,
                         auth_token_from_file=False),
     ])
-    assert reg.get("srv_a").requires_confirmation is False
+    assert _registered(reg, "srv_a").requires_confirmation is False
 
     await mgr.reload_from_config([
         MCPServerConfig(name="srv", url="http://a/mcp", enabled=True,
                         auth_token_from_file=False,
                         requires_confirmation=True),
     ])
-    assert reg.get("srv_a").requires_confirmation is True
+    assert _registered(reg, "srv_a").requires_confirmation is True
 
 
 @pytest.mark.asyncio

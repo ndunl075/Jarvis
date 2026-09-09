@@ -39,10 +39,12 @@ from __future__ import annotations
 import datetime
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from jarvis.core.config import ToolsConfig
+from jarvis.llm.conversation import Conversation
 from jarvis.llm.intent_router import (
     IntentRouter,
     SpeakIntent,
@@ -50,6 +52,7 @@ from jarvis.llm.intent_router import (
     ToolIntent,
     _build_patterns,
 )
+from jarvis.llm.ollama_client import OllamaClient
 from jarvis.tools.registry import ToolRegistry
 from jarvis.ui.capabilities import CAPABILITY_CATEGORIES
 
@@ -315,9 +318,12 @@ def _router_without_registry() -> IntentRouter:
     """The pattern layer in isolation. No registry means _try_pattern
     never applies the is-it-registered gate, so every pattern in the
     table is reachable — which is what we want to pin."""
+    # _try_pattern never reaches the LLM or the conversation, so these
+    # two are placeholders; cast at the seam rather than build clients
+    # the pattern layer will not touch.
     return IntentRouter(
-        llm=object(),
-        conversation=object(),
+        llm=cast(OllamaClient, object()),
+        conversation=cast(Conversation, object()),
         time_provider=fixed_time_provider,
     )
 
@@ -399,8 +405,8 @@ def test_registry_gate_still_falls_through_for_unregistered_tools():
     through to the LLM) rather than dispatch an unknown tool."""
     registry = ToolRegistry(ToolsConfig())
     router = IntentRouter(
-        llm=object(),
-        conversation=object(),
+        llm=cast(OllamaClient, object()),
+        conversation=cast(Conversation, object()),
         registry=registry,
         time_provider=fixed_time_provider,
     )
