@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import webbrowser
-from collections.abc import Callable
 
 from PySide6.QtCore import (
     QEasingCurve,
@@ -33,7 +32,6 @@ from PySide6.QtWidgets import (
 )
 
 from jarvis.tools.local.notes_store import (
-    Note,
     append_to_note,
     create_note,
     delete_all_notes,

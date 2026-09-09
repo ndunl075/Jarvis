@@ -11,11 +11,8 @@ import types
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from jarvis.core.config import VisionConfig
 from jarvis.tools.local.see_screen import SeeScreenArgs, SeeScreenTool
-
 
 # --- helpers ----------------------------------------------------------
 
@@ -29,7 +26,7 @@ class _FakeImage:
         self.saved_paths: list[str] = []
         self.saved_formats: list[str] = []
 
-    def resize(self, new_size, _resample) -> "_FakeImage":  # noqa: ANN001
+    def resize(self, new_size, _resample) -> _FakeImage:  # noqa: ANN001
         return _FakeImage(size=new_size)
 
     def save(self, target, format: str) -> None:  # noqa: A002

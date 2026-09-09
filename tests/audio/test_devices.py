@@ -282,6 +282,7 @@ async def test_callback_with_no_consumer_attached_is_noop(patched_sd):
 async def test_input_fallback_to_secondary_device_on_primary_failure(caplog):
     """Primary device fails → secondary succeeds → warning logged, NonFatalError published."""
     from unittest.mock import MagicMock
+
     from jarvis.core.events import EventBus, NonFatalError
 
     call_count = [0]
@@ -347,6 +348,7 @@ async def test_input_all_devices_fail_raises_device_open_error():
 async def test_input_primary_succeeds_no_fallback_triggered(caplog):
     """Primary device opens on first try — no fallback code path, no warning."""
     from unittest.mock import MagicMock
+
     from jarvis.core.events import EventBus
 
     fake_stream = MagicMock()

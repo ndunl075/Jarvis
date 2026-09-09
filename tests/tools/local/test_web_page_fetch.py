@@ -32,7 +32,11 @@ def test_fetch_page_text_returns_empty_for_non_http():
 
 
 def test_fetch_page_text_truncates_to_max_chars():
-    long_html = "<html><body><article>" + ("Sentence number one is here. " * 1000) + "</article></body></html>"
+    long_html = (
+        "<html><body><article>"
+        + ("Sentence number one is here. " * 1000)
+        + "</article></body></html>"
+    )
 
     class FakeResp:
         status_code = 200

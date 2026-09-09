@@ -14,7 +14,7 @@ paths that would touch hardware/network.
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -24,7 +24,6 @@ from jarvis.audio.wake_word import OpenWakeWord
 from jarvis.core.config import JarvisConfig
 from jarvis.core.events import ConfigChanged
 from jarvis.llm.ollama_client import OllamaClient
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -330,9 +329,9 @@ async def test_output_device_change_calls_rewire_output():
 
 
 async def test_resource_monitor_reconfigures_on_lifecycle_change():
+    from jarvis.core.events import EventBus
     from jarvis.core.resource_monitor import ResourceMonitor
     from jarvis.core.state_machine import StateMachine
-    from jarvis.core.events import EventBus
 
     bus = EventBus(loop=asyncio.get_running_loop())
     sm = StateMachine()

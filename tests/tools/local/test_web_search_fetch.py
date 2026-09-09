@@ -20,47 +20,65 @@ from jarvis.tools.local.web_search_fetch import (
 # ---------------------------------------------------------------------------
 # Fixture HTML
 #
-# Trimmed from a real https://html.duckduckgo.com/html/ response. The shape
+# Modelled on a real https://html.duckduckgo.com/html/ response. The shape
 # that matters to the parser:
 #   - the outbound link is wrapped in //duckduckgo.com/l/?uddg=<percent-encoded>
 #   - `class="result__a"` precedes `href=` on the anchor
+#   - both anchors sit on a single (long) line, as DuckDuckGo emits them
 #   - snippets carry inline <b> highlighting and HTML entities
+#
+# Composed from parts rather than pasted verbatim purely so the source stays
+# inside the 100-column limit; the assembled string is byte-for-byte the
+# single-line markup DuckDuckGo actually serves.
 # ---------------------------------------------------------------------------
 
-_DDG_HTML_FIXTURE = """<!DOCTYPE html>
-<html><body>
-<div class="serp__results">
-  <div class="result results_links results_links_deep web-result">
-    <div class="links_main links_deep result__body">
-      <h2 class="result__title">
-        <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.python.org%2F&amp;rut=6f1">Welcome to Python.org</a>
-      </h2>
-      <a class="result__snippet" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.python.org%2F&amp;rut=6f1">The official home of the <b>Python Programming Language</b>.</a>
-      <div class="clear"></div>
-    </div>
-  </div>
-  <div class="result results_links results_links_deep web-result">
-    <div class="links_main links_deep result__body">
-      <h2 class="result__title">
-        <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fen.wikipedia.org%2Fwiki%2FPython_%28programming_language%29&amp;rut=9c2">Python (programming language) - Wikipedia</a>
-      </h2>
-      <a class="result__snippet" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fen.wikipedia.org%2Fwiki%2FPython_%28programming_language%29&amp;rut=9c2">Python is a high-level, general-purpose <b>programming
-language</b>. Guido &amp; friends released it in 1991.</a>
-      <div class="clear"></div>
-    </div>
-  </div>
-  <div class="result results_links results_links_deep web-result">
-    <div class="links_main links_deep result__body">
-      <h2 class="result__title">
-        <a rel="nofollow" class="result__a" href="//docs.python.org/3/tutorial/">The Python Tutorial</a>
-      </h2>
-      <a class="result__snippet" href="//docs.python.org/3/tutorial/">Python is an easy to learn, powerful language.</a>
-      <div class="clear"></div>
-    </div>
-  </div>
-</div>
-</body></html>
-"""
+_PY_ORG = "//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.python.org%2F&amp;rut=6f1"
+_WIKIPEDIA = (
+    "//duckduckgo.com/l/?uddg=https%3A%2F%2Fen.wikipedia.org%2Fwiki%2F"
+    "Python_%28programming_language%29&amp;rut=9c2"
+)
+_DOCS = "//docs.python.org/3/tutorial/"
+
+
+def _result_block(href: str, title: str, snippet: str) -> str:
+    """One `div.result` exactly as the HTML endpoint lays it out."""
+    return (
+        '  <div class="result results_links results_links_deep web-result">\n'
+        '    <div class="links_main links_deep result__body">\n'
+        '      <h2 class="result__title">\n'
+        f'        <a rel="nofollow" class="result__a" href="{href}">{title}</a>\n'
+        "      </h2>\n"
+        f'      <a class="result__snippet" href="{href}">{snippet}</a>\n'
+        '      <div class="clear"></div>\n'
+        "    </div>\n"
+        "  </div>\n"
+    )
+
+
+_DDG_HTML_FIXTURE = (
+    "<!DOCTYPE html>\n"
+    "<html><body>\n"
+    '<div class="serp__results">\n'
+    + _result_block(
+        _PY_ORG,
+        "Welcome to Python.org",
+        "The official home of the <b>Python Programming Language</b>.",
+    )
+    + _result_block(
+        _WIKIPEDIA,
+        "Python (programming language) - Wikipedia",
+        # DuckDuckGo wraps long snippets, sometimes mid-<b>.
+        "Python is a high-level, general-purpose <b>programming\n"
+        "language</b>. Guido &amp; friends released it in 1991.",
+    )
+    + _result_block(
+        _DOCS,
+        "The Python Tutorial",
+        "Python is an easy to learn, powerful language.",
+    )
+    + "</div>\n"
+    "</body></html>\n"
+)
 
 _NO_RESULTS_HTML = """<!DOCTYPE html>
 <html><body>

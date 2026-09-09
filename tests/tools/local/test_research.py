@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import queue
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 from jarvis.tools.local.research import (
     CloseResearchTool,

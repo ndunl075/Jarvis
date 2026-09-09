@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import sys
 import threading
 from collections.abc import AsyncIterator
@@ -47,9 +46,7 @@ from jarvis.core.config import (
     LifecycleConfig,
     MCPServerConfig,
     load_config,
-
 )
-from jarvis.core.request_context import current_user_transcription
 from jarvis.core.events import (
     ConfigChanged,
     ConversationalStateChanged,
@@ -62,22 +59,23 @@ from jarvis.core.events import (
 )
 from jarvis.core.lifecycle import LifecycleManager
 from jarvis.core.mode_coordinator import ModeCoordinator
+from jarvis.core.request_context import current_user_transcription
 from jarvis.core.resource_monitor import ResourceMonitor
 from jarvis.core.state_machine import Mode, StateMachine
 from jarvis.llm.conversation import Conversation
 from jarvis.llm.intent_router import IntentRouter, StopIntent, ToolIntent, execute_intent
 from jarvis.llm.ollama_client import OllamaClient
 from jarvis.tools import MCPManager, ToolRegistry, setup_local_tools
-from jarvis.ui.hotkeys import HotkeyManager
-from jarvis.ui.overlay import OverlayOrb, make_amplitude_callback
 from jarvis.ui.clipboard_history_panel import ClipboardHistoryPanel
 from jarvis.ui.command_palette import CommandPalette
 from jarvis.ui.dashboard_panel import DashboardPanel
 from jarvis.ui.deep_research_panel import DeepResearchPanel
 from jarvis.ui.help_panel import HelpPanel
+from jarvis.ui.hotkeys import HotkeyManager
 from jarvis.ui.log_panel import LogPanel
 from jarvis.ui.notes_panel import NotesPanel
 from jarvis.ui.onboarding_panel import OnboardingPanel
+from jarvis.ui.overlay import OverlayOrb, make_amplitude_callback
 from jarvis.ui.research_panel import ResearchPanel
 from jarvis.ui.settings import SettingsWindow
 from jarvis.ui.tray import TrayIcon, ensure_system_tray_available
@@ -817,9 +815,8 @@ def run() -> int:
     ))
 
     def _deep_research_config_provider():
-        from jarvis.tools.local.deep_research_runner import build_deep_research_config
-
         from jarvis.llm.ollama_client import DEFAULT_ENDPOINT
+        from jarvis.tools.local.deep_research_runner import build_deep_research_config
 
         return build_deep_research_config(
             research=cfg.research,

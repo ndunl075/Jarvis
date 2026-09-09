@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import queue
 from unittest.mock import AsyncMock, MagicMock
 
 from jarvis.tools.local.deep_research_tools import (
@@ -29,8 +28,6 @@ def test_deep_research_empty_query():
 
 
 def test_deep_research_waits_for_queue_result():
-    q: queue.Queue = queue.Queue()
-
     def on_start(query, result_q):
         result_q.put(("Done, sir.", "sess-1"))
 

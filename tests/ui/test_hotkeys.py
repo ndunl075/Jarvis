@@ -14,10 +14,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from jarvis.core.config import HotkeysConfig
-from jarvis.core.events import EventBus, ModeChanged, WakeWordDetected
+from jarvis.core.events import EventBus, WakeWordDetected
 from jarvis.core.state_machine import Mode, StateMachine
 from jarvis.ui.hotkeys import HotkeyManager, _to_pynput_hotkey
-
 
 # --- pynput translation -------------------------------------------------
 
@@ -93,7 +92,11 @@ def _install_fake_pynput() -> _FakeGlobalHotKeys:
 @pytest.fixture
 def fake_pynput(monkeypatch):
     kb = _install_fake_pynput()
-    monkeypatch.setitem(sys.modules, "pynput", sys.modules.get("pynput") or types.ModuleType("pynput"))
+    monkeypatch.setitem(
+        sys.modules,
+        "pynput",
+        sys.modules.get("pynput") or types.ModuleType("pynput"),
+    )
     monkeypatch.setitem(sys.modules, "pynput.keyboard", kb)
     yield _FakeGlobalHotKeys
 

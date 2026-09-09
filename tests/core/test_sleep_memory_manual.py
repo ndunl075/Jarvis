@@ -24,7 +24,6 @@ import gc
 
 import pytest
 
-
 _RSS_DROP_BYTES = 150_000_000  # whisper (~150 MB) is the floor we promise
 
 

@@ -25,7 +25,6 @@ from jarvis.core.config import LifecycleConfig
 from jarvis.core.events import EventBus
 from jarvis.core.state_machine import StateMachine
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

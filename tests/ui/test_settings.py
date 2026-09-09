@@ -382,7 +382,7 @@ def test_hotkeys_tab_clear_disabled_for_required_bindings(qapp):
     command_palette have can_be_empty=True, so only their Clear buttons
     are enabled. Test via the form: walk each row, find the QPushButton
     labelled 'Clear', confirm enabled state matches."""
-    from PySide6.QtWidgets import QHBoxLayout, QPushButton
+    from PySide6.QtWidgets import QPushButton
     cfg = _cfg()
     tab = HotkeysTab(config=cfg, on_change=lambda: None)
     # Collect every Clear button child.

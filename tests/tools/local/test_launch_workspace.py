@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import pathlib
 from unittest.mock import patch
 
 import pytest
@@ -86,7 +87,10 @@ def test_launch_entry_executable():
     )
     with patch("jarvis.tools.local.launch_workspace.winplat.launch_path") as mock:
         with patch("pathlib.Path.is_file", return_value=True):
-            with patch("pathlib.Path.resolve", return_value=__import__("pathlib").Path(r"C:\test\app.exe")):
+            with patch(
+                "pathlib.Path.resolve",
+                return_value=pathlib.Path(r"C:\test\app.exe"),
+            ):
                 _launch_entry(entry)
     mock.assert_called_once()
 

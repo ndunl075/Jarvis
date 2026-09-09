@@ -519,14 +519,16 @@ class OverlayOrb(QWidget):
                 self._displayed_amplitude *= _EMA_KEEP
 
             lf = _LERP_FACTOR
-            self._energy               = _lerp(self._energy,               t_energy,                lf)
-            self._render_rotation_speed = _lerp(self._render_rotation_speed, target.rotation_speed,  lf)
-            self._particle_speed        = _lerp(self._particle_speed,        t_particle,              lf)
-            self._shell_radius          = _lerp(self._shell_radius,          t_shell,                 lf)
-            self._ring_spread           = _lerp(self._ring_spread,           target.ring_spread,      lf)
-            self._filament_opacity      = _lerp(self._filament_opacity,      t_filament,              lf)
-            self._core_scale            = _lerp(self._core_scale,            t_core_scale,            lf)
-            self._bloom                 = _lerp(self._bloom,                 t_bloom,                 lf)
+            self._energy = _lerp(self._energy, t_energy, lf)
+            self._render_rotation_speed = _lerp(
+                self._render_rotation_speed, target.rotation_speed, lf
+            )
+            self._particle_speed = _lerp(self._particle_speed, t_particle, lf)
+            self._shell_radius = _lerp(self._shell_radius, t_shell, lf)
+            self._ring_spread = _lerp(self._ring_spread, target.ring_spread, lf)
+            self._filament_opacity = _lerp(self._filament_opacity, t_filament, lf)
+            self._core_scale = _lerp(self._core_scale, t_core_scale, lf)
+            self._bloom = _lerp(self._bloom, t_bloom, lf)
 
         # Advance ring rotation phases with a multi-frequency superposition.
         # Three sine waves at incommensurable frequencies with staggered phase
@@ -547,7 +549,7 @@ class OverlayOrb(QWidget):
 
     # -- rendering --------------------------------------------------------
 
-    def paintEvent(self, _event: QPaintEvent) -> None:
+    def paintEvent(self, _event: QPaintEvent) -> None:  # noqa: N802 - Qt override
         if not self._alive or self._state is ConversationalState.IDLE:
             return
         p = QPainter(self)
@@ -591,7 +593,9 @@ class OverlayOrb(QWidget):
         # Minimum 0.5 alpha so rings always read as clearly cyan even when
         # filament_opacity is still ramping up from the lerp start.
         ring_alpha = max(0.5, self._filament_opacity) * 0.55
-        for i, (r_frac, base_y) in enumerate(zip(_RING_RADII, _RING_Y_SCALES)):
+        for i, (r_frac, base_y) in enumerate(
+            zip(_RING_RADII, _RING_Y_SCALES, strict=True)
+        ):
             ring_r = r_frac * widget_radius * self._ring_spread
             phase = self._ring_phases[i]
             # Tilt precession: Y-scale wobbles around its base value so the

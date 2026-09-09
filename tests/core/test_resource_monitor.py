@@ -23,12 +23,9 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from jarvis.core.events import ConversationalStateChanged, EventBus
 from jarvis.core.resource_monitor import ResourceMonitor
 from jarvis.core.state_machine import ConversationalState, Mode, StateMachine
-
 
 # --- helpers ------------------------------------------------------------------
 

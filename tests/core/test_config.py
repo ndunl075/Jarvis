@@ -10,11 +10,11 @@ from pydantic import ValidationError
 
 from jarvis.core import config as cfg_mod
 from jarvis.core.config import (
+    _SYSTEM_PROMPT_V6,
     CURRENT_SCHEMA_VERSION,
     ConfigMigrationError,
     JarvisConfig,
     MCPServerConfig,
-    _SYSTEM_PROMPT_V6,
     default_config_path,
     load_config,
     migrate,

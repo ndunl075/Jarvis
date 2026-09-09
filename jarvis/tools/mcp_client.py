@@ -53,7 +53,7 @@ from pydantic import BaseModel, ConfigDict
 from jarvis.core.config import MCPServerConfig
 from jarvis.tools.registry import (
     TOOL_NAME_REGEX,
-    ToolNameCollision,
+    ToolNameCollisionError,
     ToolRegistry,
     ToolResult,
 )
@@ -237,7 +237,7 @@ class MCPServerConnection:
             from mcp import ClientSession
             from mcp.client.streamable_http import streamablehttp_client
         except ImportError as e:  # pragma: no cover - exercised via monkeypatch
-            raise MCPUnavailable("mcp SDK not installed") from e
+            raise MCPUnavailableError("mcp SDK not installed") from e
 
         stack = AsyncExitStack()
         try:
@@ -316,7 +316,7 @@ def _translate_call_result(result: Any) -> ToolResult:
 # --- exceptions -----------------------------------------------------------
 
 
-class MCPUnavailable(RuntimeError):
+class MCPUnavailableError(RuntimeError):
     """Raised inside connect() when the mcp SDK isn't importable. Caught by
     MCPManager.add_server and logged as a skip."""
 
@@ -361,7 +361,7 @@ class MCPManager:
         conn = MCPServerConnection(config.name, url, token)
         try:
             specs = await conn.connect()
-        except MCPUnavailable as e:
+        except MCPUnavailableError as e:
             log.warning("MCP unavailable for %r: %s", config.name, e)
             return
         except Exception as e:
@@ -392,7 +392,7 @@ class MCPManager:
             )
             try:
                 self._registry.register(tool)
-            except ToolNameCollision as e:
+            except ToolNameCollisionError as e:
                 log.warning("MCP tool name collision, dropping %r: %s", tool_name, e)
                 continue
             registered.append(tool_name)
