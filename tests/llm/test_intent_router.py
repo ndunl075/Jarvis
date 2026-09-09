@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+from typing import cast
 from urllib.parse import quote_plus
 
 import pytest
+from pydantic import BaseModel
 
 from jarvis.core.config import ToolsConfig
 from jarvis.llm.conversation import Conversation
@@ -29,10 +31,15 @@ from jarvis.llm.intent_router import (
     _normalize,
     execute_intent,
 )
-from jarvis.llm.ollama_client import ChatChunk
+from jarvis.llm.ollama_client import ChatChunk, OllamaClient
 from jarvis.tools.registry import EmptyArgs, ToolRegistry, ToolResult
 
 # --- helpers ---------------------------------------------------------
+#
+# IntentRouter takes the *concrete* OllamaClient and Conversation, not
+# protocols, so the scriptable fakes below cannot structurally conform to
+# them. Each construction site casts at that one seam; everything else in
+# this file stays checked.
 
 
 class FakeOllama:
@@ -114,7 +121,10 @@ def _make_router(
     conv = _Conv()
     time_provider = (lambda: fixed_time) if fixed_time else datetime.datetime.now
     r = IntentRouter(
-        llm=llm, conversation=conv, tools=tools, time_provider=time_provider,
+        llm=cast(OllamaClient, llm),
+        conversation=cast(Conversation, conv),
+        tools=tools,
+        time_provider=time_provider,
     )
     return r, llm, conv
 
@@ -588,7 +598,7 @@ async def test_conversation_is_injected_state_persists_across_routes():
     second call's user_turns list should have both entries."""
     conv = Conversation(system_prompt_provider=lambda: "sys")
     llm = FakeOllama(chunks=[_content_chunk("ok", done=True)])
-    router = IntentRouter(llm=llm, conversation=conv)
+    router = IntentRouter(llm=cast(OllamaClient, llm), conversation=conv)
 
     await _collect(router.route("first question"))
     await _collect(router.route("second question"))
@@ -627,7 +637,9 @@ async def test_cancellation_skips_assistant_turn_keeps_user_turn():
 
     llm = StallingLLM()
     conv = _Conv()
-    router = IntentRouter(llm=llm, conversation=conv)
+    router = IntentRouter(
+        llm=cast(OllamaClient, llm), conversation=cast(Conversation, conv)
+    )
 
     received = []
 
@@ -663,14 +675,24 @@ def _make_router_with_registry(
 ) -> tuple[IntentRouter, FakeOllama, _Conv]:
     llm = FakeOllama(chunks=chunks)
     conv = _Conv()
-    r = IntentRouter(llm=llm, conversation=conv, registry=registry)
+    r = IntentRouter(
+        llm=cast(OllamaClient, llm),
+        conversation=cast(Conversation, conv),
+        registry=registry,
+    )
     return r, llm, conv
+
+
+# The tool fakes below are shaped like the real tools in
+# jarvis/tools/local: `args_schema` annotated `type[BaseModel]`, `execute`
+# narrowed to the fake's own args model. `Tool` is generic in that model,
+# so `registry.register()` checks them for conformance.
 
 
 class _PingTool:
     name: str = "ping"
     description: str = "Returns pong."
-    args_schema = EmptyArgs
+    args_schema: type[BaseModel] = EmptyArgs
     requires_confirmation: bool = False
 
     async def execute(self, args: EmptyArgs) -> ToolResult:
@@ -708,12 +730,12 @@ async def test_pattern_used_when_tool_is_registered():
     """Sanity check on the inverse: with the tool registered, the
     pattern wins and the LLM is not consulted."""
     class _OpenApp:
-        name = "open_app"
-        description = "Open an app."
-        args_schema = EmptyArgs
-        requires_confirmation = False
+        name: str = "open_app"
+        description: str = "Open an app."
+        args_schema: type[BaseModel] = EmptyArgs
+        requires_confirmation: bool = False
 
-        async def execute(self, args):  # pragma: no cover
+        async def execute(self, args: EmptyArgs) -> ToolResult:  # pragma: no cover
             return ToolResult(success=True)
 
     reg = ToolRegistry(ToolsConfig())
@@ -735,7 +757,7 @@ async def _collect_strings(gen) -> list[str]:
 class _OkTool:
     name: str = "ok_tool"
     description: str = "Always returns a string."
-    args_schema = EmptyArgs
+    args_schema: type[BaseModel] = EmptyArgs
     requires_confirmation: bool = False
 
     def __init__(self, output: str | None = "tool said hi") -> None:
@@ -748,7 +770,7 @@ class _OkTool:
 class _FailTool:
     name: str = "fail_tool"
     description: str = "Always fails."
-    args_schema = EmptyArgs
+    args_schema: type[BaseModel] = EmptyArgs
     requires_confirmation: bool = False
 
     def __init__(self, error: str | None = "things went wrong") -> None:
@@ -813,12 +835,12 @@ async def test_execute_intent_tool_with_dict_output_yields_generic_ok():
     """Structured (dict) tool outputs are not spoken verbatim; the
     persona fallback runs so the user hears a confirmation."""
     class _StructTool:
-        name = "struct_tool"
-        description = "Returns a dict."
-        args_schema = EmptyArgs
-        requires_confirmation = False
+        name: str = "struct_tool"
+        description: str = "Returns a dict."
+        args_schema: type[BaseModel] = EmptyArgs
+        requires_confirmation: bool = False
 
-        async def execute(self, args):
+        async def execute(self, args: EmptyArgs) -> ToolResult:
             return ToolResult(success=True, output={"k": "v"})
 
     reg = ToolRegistry(ToolsConfig())
@@ -974,7 +996,9 @@ async def test_tool_result_string_never_lands_in_conversation_history():
 
     llm = FakeOllama(chunks=turn_1_chunks)
     conv = _Conv()
-    router = IntentRouter(llm=llm, conversation=conv)
+    router = IntentRouter(
+        llm=cast(OllamaClient, llm), conversation=cast(Conversation, conv)
+    )
 
     await _collect(router.route("cpu"))
     # Mid-test: rebind the LLM's scripted chunks for turn 2.
@@ -1144,7 +1168,7 @@ async def test_stop_does_not_pollute_conversation_history():
     messages_before = list(conv.current_messages())
 
     llm = FakeOllama()
-    router = IntentRouter(llm=llm, conversation=conv)
+    router = IntentRouter(llm=cast(OllamaClient, llm), conversation=conv)
     await _collect(router.route("stop"))
 
     assert conv.current_messages() == messages_before

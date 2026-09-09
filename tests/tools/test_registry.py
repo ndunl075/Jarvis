@@ -22,6 +22,12 @@ from jarvis.tools.registry import (
 )
 
 # --- fakes -------------------------------------------------------------
+#
+# Shaped exactly like a real tool in jarvis/tools/local: `args_schema`
+# annotated `type[BaseModel]`, `execute` narrowed to the fake's own args
+# model. `Tool` is a protocol generic in that model, so `register()`
+# checks these for conformance — a change to the protocol fails pyright
+# here rather than surfacing months later as an AttributeError.
 
 
 class _EchoArgs(BaseModel):
@@ -32,7 +38,7 @@ class _EchoArgs(BaseModel):
 class _EchoTool:
     name: str = "echo"
     description: str = "Echo the text some number of times."
-    args_schema = _EchoArgs
+    args_schema: type[BaseModel] = _EchoArgs
     requires_confirmation: bool = False
 
     def __init__(self) -> None:
@@ -48,7 +54,7 @@ class _EchoTool:
 class _NoArgsTool:
     name: str = "ping"
     description: str = "Returns pong."
-    args_schema = EmptyArgs
+    args_schema: type[BaseModel] = EmptyArgs
     requires_confirmation: bool = False
 
     async def execute(self, args: EmptyArgs) -> ToolResult:
@@ -58,7 +64,7 @@ class _NoArgsTool:
 class _CrashingTool:
     name: str = "crash"
     description: str = "Always crashes."
-    args_schema = EmptyArgs
+    args_schema: type[BaseModel] = EmptyArgs
     requires_confirmation: bool = False
 
     async def execute(self, args: EmptyArgs) -> ToolResult:
@@ -134,7 +140,7 @@ def test_register_built_in_then_mcp_clobber_is_blocked():
     class _MCPEcho:
         name: str = "echo"
         description: str = "MCP echo from a remote server."
-        args_schema = _EchoArgs
+        args_schema: type[BaseModel] = _EchoArgs
         requires_confirmation: bool = False
 
         async def execute(self, args: _EchoArgs) -> ToolResult:

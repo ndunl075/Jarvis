@@ -21,6 +21,7 @@ What is pinned here:
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 import pytest
 from pydantic import BaseModel, Field
@@ -29,6 +30,7 @@ from jarvis.core.config import ToolsConfig
 from jarvis.tools.registry import (
     ConfirmationRequest,
     EmptyArgs,
+    Tool,
     ToolConfirmer,
     ToolRegistry,
     ToolResult,
@@ -112,11 +114,16 @@ def _registry(confirmer=None, **kwargs) -> ToolRegistry:
     return ToolRegistry(ToolsConfig(**kwargs), confirmer=confirmer)
 
 
-def _register(reg: ToolRegistry, tool) -> None:
-    """register() is typed for `Tool`, and pyright rejects every duck-typed
-    fake in this file over `args_schema` invariance. One ignore here beats
-    one on every call site."""
-    reg.register(tool)  # type: ignore[arg-type]
+def _register(reg: ToolRegistry, tool: Tool[Any]) -> None:
+    """register() with the parameter typed, so the fakes in this file are
+    checked for Tool conformance at every call site.
+
+    This used to carry a blanket `# type: ignore[arg-type]`: `args_schema`
+    was a mutable protocol attribute, hence invariant, and no tool in the
+    tree could satisfy it. It is a read-only property now and `Tool` is
+    generic in its args model, so the ignore suppressed nothing but future
+    signal."""
+    reg.register(tool)
 
 # --- protocol surface ---------------------------------------------------
 
@@ -297,7 +304,10 @@ async def test_tool_without_the_attribute_at_all_is_not_gated():
             return ToolResult(success=True, output="ran")
 
     reg = _registry(_RecordingConfirmer(verdict=False))
-    _register(reg, _Legacy())
+    # The one deliberate protocol violation in this file: _Legacy omits
+    # `requires_confirmation`, which is the whole point of the test, so
+    # pyright is right and the ignore is the assertion.
+    _register(reg, _Legacy())  # type: ignore[arg-type]
 
     assert (await reg.execute("legacy", {})).success is True
 

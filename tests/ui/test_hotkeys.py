@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import types
+from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,6 +18,7 @@ from jarvis.core.config import HotkeysConfig
 from jarvis.core.events import EventBus, WakeWordDetected
 from jarvis.core.state_machine import Mode, StateMachine
 from jarvis.ui.hotkeys import HotkeyManager, _to_pynput_hotkey
+from tests._typing import fake_module
 
 # --- pynput translation -------------------------------------------------
 
@@ -59,7 +61,7 @@ class _FakeGlobalHotKeys:
 
     instances: list[_FakeGlobalHotKeys] = []
 
-    def __init__(self, actions: dict[str, object]) -> None:
+    def __init__(self, actions: dict[str, Callable[[], None]]) -> None:
         self.actions = actions
         self.start_calls = 0
         self.stop_calls = 0
@@ -77,14 +79,13 @@ class _FakeGlobalHotKeys:
         self.actions[key]()
 
 
-def _install_fake_pynput() -> _FakeGlobalHotKeys:
-    """Inject a fake pynput.keyboard module into sys.modules so the
-    lazy import inside register_all() finds our stub. Returns the
-    fake class so the test can assert on its state."""
-    pkg = types.ModuleType("pynput")
-    kb = types.ModuleType("pynput.keyboard")
-    kb.GlobalHotKeys = _FakeGlobalHotKeys  # type: ignore[attr-defined]
-    pkg.keyboard = kb  # type: ignore[attr-defined]
+def _install_fake_pynput() -> types.ModuleType:
+    """Build the fake `pynput.keyboard` module the lazy import inside
+    register_all() will find. The caller puts it in sys.modules; the
+    class tests assert against is _FakeGlobalHotKeys itself."""
+    # The parent `pynput` package is built by the fixture below, which is
+    # what actually installs both modules into sys.modules.
+    kb = fake_module("pynput.keyboard", GlobalHotKeys=_FakeGlobalHotKeys)
     _FakeGlobalHotKeys.instances.clear()
     return kb
 

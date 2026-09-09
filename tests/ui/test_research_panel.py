@@ -11,7 +11,13 @@ on the panel instance to prevent a real FollowUpWorker from being started.
 from __future__ import annotations
 
 import queue
+from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock, patch
+
+from PySide6.QtWidgets import QLayoutItem, QPushButton
+
+if TYPE_CHECKING:
+    from jarvis.ui.research_panel import ResearchPanel
 
 # ---------------------------------------------------------------------------
 # _extract_sources
@@ -94,8 +100,19 @@ def _make_panel(qapp):
         mock_worker.isRunning.return_value = False
         mock_cls.return_value = mock_worker
         panel = ResearchPanel()
-    panel._mock_worker_cls = mock_cls
     return panel
+
+
+def _chip_at(panel: ResearchPanel, index: int) -> QPushButton:
+    """The follow-up chip at `index`.
+
+    `QLayout.itemAt` is Optional and `QLayoutItem.widget()` returns the
+    QWidget base, so `.text()` / `.click()` need narrowing. The chips are
+    QPushButtons (`ResearchPanel._on_followup_questions`), and every
+    caller here indexes below `_chips_layout.count()`.
+    """
+    item = cast(QLayoutItem, panel._chips_layout.itemAt(index))
+    return cast(QPushButton, item.widget())
 
 
 def _start(panel, query, rq):
@@ -537,7 +554,7 @@ def test_followup_chips_have_correct_labels(qapp):
     panel._on_followup_questions(questions)
 
     labels = [
-        panel._chips_layout.itemAt(i).widget().text()
+        _chip_at(panel, i).text()
         for i in range(panel._chips_layout.count())
     ]
     assert labels == questions
@@ -555,7 +572,7 @@ def test_chip_click_starts_new_research(qapp):
         mock_worker2 = MagicMock()
         mock_worker2.isRunning.return_value = False
         mock_cls2.return_value = mock_worker2
-        chip = panel._chips_layout.itemAt(0).widget()
+        chip = _chip_at(panel, 0)
         chip.click()
 
     mock_cls2.assert_called_once_with(

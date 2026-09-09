@@ -9,6 +9,7 @@ wired now (see registry.py header and jarvis/ui/tool_confirm.py)."""
 from __future__ import annotations
 
 from jarvis.tools.local.files import ListDirectoryArgs, ListDirectoryTool
+from tests._typing import output_text
 
 
 async def test_lists_directory_entries_sorted(tmp_path):
@@ -19,7 +20,7 @@ async def test_lists_directory_entries_sorted(tmp_path):
         ListDirectoryArgs(path=str(tmp_path))
     )
     assert result.success
-    out = result.output or ""
+    out = output_text(result)
     # Names appear sorted (a, b, sub).
     assert out.index("a.txt") < out.index("b.txt") < out.index("sub")
 
@@ -29,7 +30,7 @@ async def test_empty_directory_says_so(tmp_path):
         ListDirectoryArgs(path=str(tmp_path))
     )
     assert result.success
-    assert "empty" in (result.output or "").lower()
+    assert "empty" in output_text(result).lower()
 
 
 async def test_nonexistent_path_returns_error(tmp_path):
@@ -55,7 +56,7 @@ async def test_large_directory_summarised(tmp_path):
         ListDirectoryArgs(path=str(tmp_path))
     )
     assert result.success
-    out = result.output or ""
+    out = output_text(result)
     assert "250" in out
     # The summary shouldn't include every entry verbatim.
     assert "f_0249" not in out

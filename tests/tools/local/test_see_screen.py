@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from jarvis.core.config import VisionConfig
 from jarvis.tools.local.see_screen import SeeScreenArgs, SeeScreenTool
+from tests._typing import fake_module
 
 # --- helpers ----------------------------------------------------------
 
@@ -39,17 +40,15 @@ class _FakeImage:
 
 
 def _install_fake_pyautogui_and_pil(image: _FakeImage) -> dict[str, types.ModuleType]:
-    fake_pyautogui = types.ModuleType("pyautogui")
-    fake_pyautogui.screenshot = MagicMock(return_value=image)
-    fake_pil = types.ModuleType("PIL")
-    fake_pil_image_mod = types.ModuleType("PIL.Image")
+    fake_pyautogui = fake_module("pyautogui", screenshot=MagicMock(return_value=image))
 
     class _Resampling:
         LANCZOS = "LANCZOS"
 
-    fake_pil_image_mod.Image = _FakeImage  # type: ignore[attr-defined]
-    fake_pil_image_mod.Resampling = _Resampling  # type: ignore[attr-defined]
-    fake_pil.Image = fake_pil_image_mod  # type: ignore[attr-defined]
+    fake_pil_image_mod = fake_module(
+        "PIL.Image", Image=_FakeImage, Resampling=_Resampling
+    )
+    fake_pil = fake_module("PIL", Image=fake_pil_image_mod)
     return {
         "pyautogui": fake_pyautogui,
         "PIL": fake_pil,
@@ -176,19 +175,17 @@ async def test_downscales_image_to_max_dim(tmp_path):
 
 
 async def test_screenshot_failure_returns_error(tmp_path):
-    fake_pyautogui = types.ModuleType("pyautogui")
-    fake_pyautogui.screenshot = MagicMock(
-        side_effect=RuntimeError("display unavailable")
+    fake_pyautogui = fake_module(
+        "pyautogui", screenshot=MagicMock(side_effect=RuntimeError("display unavailable"))
     )
-    fake_pil = types.ModuleType("PIL")
-    fake_pil_image_mod = types.ModuleType("PIL.Image")
-    fake_pil_image_mod.Image = _FakeImage  # type: ignore[attr-defined]
 
     class _Resampling:
         LANCZOS = "LANCZOS"
 
-    fake_pil_image_mod.Resampling = _Resampling  # type: ignore[attr-defined]
-    fake_pil.Image = fake_pil_image_mod  # type: ignore[attr-defined]
+    fake_pil_image_mod = fake_module(
+        "PIL.Image", Image=_FakeImage, Resampling=_Resampling
+    )
+    fake_pil = fake_module("PIL", Image=fake_pil_image_mod)
     fakes = {
         "pyautogui": fake_pyautogui,
         "PIL": fake_pil,

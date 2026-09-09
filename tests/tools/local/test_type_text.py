@@ -12,13 +12,12 @@ from jarvis.tools.local.type_into_active_window import (
     TypeIntoActiveWindowArgs,
     TypeIntoActiveWindowTool,
 )
+from tests._typing import fake_module
 
 
 def _fake_pyautogui() -> tuple[types.ModuleType, MagicMock]:
-    fake = types.ModuleType("pyautogui")
     typewrite = MagicMock()
-    fake.typewrite = typewrite
-    return fake, typewrite
+    return fake_module("pyautogui", typewrite=typewrite), typewrite
 
 
 async def test_typewrite_called_with_text_and_interval():

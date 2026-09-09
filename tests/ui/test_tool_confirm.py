@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
+from typing import Any
 
 import pytest
 from PySide6.QtCore import Qt
@@ -32,7 +33,7 @@ from PySide6.QtWidgets import QDialog
 
 from jarvis.app import _AUDIO_SHUTDOWN_TIMEOUT
 from jarvis.core.config import ToolsConfig
-from jarvis.tools.registry import ConfirmationRequest, ToolRegistry, ToolResult
+from jarvis.tools.registry import ConfirmationRequest, Tool, ToolRegistry, ToolResult
 from jarvis.ui.tool_confirm import (
     _TIMEOUT_SECONDS,
     _WATCHDOG_GRACE_SECONDS,
@@ -420,10 +421,10 @@ def test_a_late_verdict_cannot_answer_a_newer_request(qapp, audio_loop):
 # --- registry + confirmer together ---------------------------------------
 
 
-def _register(reg: ToolRegistry, tool) -> None:
-    """See tests/tools/test_tool_confirmation.py — pyright rejects
-    duck-typed tools over `args_schema` invariance."""
-    reg.register(tool)  # type: ignore[arg-type]
+def _register(reg: ToolRegistry, tool: Tool[Any]) -> None:
+    """See tests/tools/test_tool_confirmation.py — typed, so the fakes
+    here are checked for Tool conformance."""
+    reg.register(tool)
 
 
 def _spy_tool():

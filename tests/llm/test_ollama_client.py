@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Sequence
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -38,7 +39,10 @@ class _MockStreamCM:
 
     def __init__(
         self,
-        lines: list[bytes | str],
+        # Sequence, not list: the lines are only iterated, and a list
+        # parameter would be invariant, so every caller passing a plain
+        # list[str] of NDJSON lines would need a cast.
+        lines: Sequence[bytes | str],
         *,
         status_code: int = 200,
         between_sleep: float = 0.0,

@@ -26,6 +26,7 @@ from jarvis.core.events import EventBus, ModeChanged
 from jarvis.core.lifecycle import LifecycleManager
 from jarvis.core.mode_coordinator import ModeCoordinator
 from jarvis.core.state_machine import Mode, StateMachine
+from tests._typing import as_mock
 
 # --- fakes ----------------------------------------------------------------
 
@@ -70,7 +71,12 @@ class FakeTTS:
         self._release.set()
 
 
-def _make_lm(loadables=()):
+def _make_lm(loadables=()) -> LifecycleManager:
+    """A real LifecycleManager with its three async entry points wrapped
+    in AsyncMocks, so tests can assert on the awaits while the real
+    implementation still runs. Read the recorders back through
+    `as_mock()`: the declared type of `lm.load_all` is still a bound
+    method."""
     lm = LifecycleManager(loadables)
     lm.load_all = AsyncMock(wraps=lm.load_all)
     lm.unload_all = AsyncMock(wraps=lm.unload_all)
@@ -115,7 +121,7 @@ async def test_sleep_speaks_then_unloads():
     assert tts.speak_calls == ["Going to sleep, sir."]
     pipeline.stop.assert_awaited_once()
     assert sm.mode is Mode.SLEEPING
-    lm.transition_to_mode.assert_awaited_once_with(Mode.ACTIVE, Mode.SLEEPING)
+    as_mock(lm.transition_to_mode).assert_awaited_once_with(Mode.ACTIVE, Mode.SLEEPING)
 
 
 @pytest.mark.asyncio
@@ -144,7 +150,7 @@ async def test_sleep_skips_speak_if_tts_unloaded():
 async def test_wake_loads_then_starts_pipeline():
     coord, sm, lm, pipeline, _ = _make_coord(initial_mode=Mode.SLEEPING)
     await coord.request(Mode.ACTIVE)
-    lm.transition_to_mode.assert_awaited_once_with(Mode.SLEEPING, Mode.ACTIVE)
+    as_mock(lm.transition_to_mode).assert_awaited_once_with(Mode.SLEEPING, Mode.ACTIVE)
     assert sm.mode is Mode.ACTIVE
     pipeline.start.assert_awaited_once()
 
@@ -190,7 +196,7 @@ async def test_wake_during_sleep_confirmation_cancels_sleep():
     assert sm.mode is Mode.ACTIVE
     assert tts.cancel_count >= 1
     pipeline.stop.assert_not_awaited()
-    lm.transition_to_mode.assert_not_awaited()
+    as_mock(lm.transition_to_mode).assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -258,9 +264,9 @@ async def test_mute_toggle_does_not_touch_lifecycle():
     assert sm.mode is Mode.MUTED
     # transition_to_mode is called for uniformity but its body is a no-op
     # (the ACTIVE<->MUTED pair isn't in the load/unload sets).
-    lm.transition_to_mode.assert_awaited_once_with(Mode.ACTIVE, Mode.MUTED)
-    lm.load_all.assert_not_awaited()
-    lm.unload_all.assert_not_awaited()
+    as_mock(lm.transition_to_mode).assert_awaited_once_with(Mode.ACTIVE, Mode.MUTED)
+    as_mock(lm.load_all).assert_not_awaited()
+    as_mock(lm.unload_all).assert_not_awaited()
     assert tts.speak_calls == []
 
 
@@ -269,7 +275,7 @@ async def test_unmute_does_not_touch_lifecycle():
     coord, sm, lm, _, _ = _make_coord(initial_mode=Mode.MUTED)
     await coord.request(Mode.ACTIVE)
     assert sm.mode is Mode.ACTIVE
-    lm.load_all.assert_not_awaited()
+    as_mock(lm.load_all).assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -278,7 +284,7 @@ async def test_mute_from_sleeping_wakes_to_muted():
     then suppresses wake word."""
     coord, sm, lm, pipeline, _ = _make_coord(initial_mode=Mode.SLEEPING)
     await coord.request(Mode.MUTED)
-    lm.transition_to_mode.assert_awaited_once_with(Mode.SLEEPING, Mode.MUTED)
+    as_mock(lm.transition_to_mode).assert_awaited_once_with(Mode.SLEEPING, Mode.MUTED)
     assert sm.mode is Mode.MUTED
     pipeline.start.assert_awaited_once()
 
@@ -293,7 +299,7 @@ async def test_request_current_mode_is_noop():
     assert tts.speak_calls == []
     pipeline.stop.assert_not_awaited()
     pipeline.start.assert_not_awaited()
-    lm.transition_to_mode.assert_not_awaited()
+    as_mock(lm.transition_to_mode).assert_not_awaited()
     assert sm.mode is Mode.ACTIVE
 
 
@@ -302,7 +308,7 @@ async def test_sleep_when_already_sleeping_is_noop():
     coord, sm, lm, _, tts = _make_coord(initial_mode=Mode.SLEEPING)
     await coord.request(Mode.SLEEPING)
     assert tts.speak_calls == []
-    lm.transition_to_mode.assert_not_awaited()
+    as_mock(lm.transition_to_mode).assert_not_awaited()
     assert sm.mode is Mode.SLEEPING
 
 

@@ -9,18 +9,16 @@ from unittest.mock import MagicMock, patch
 
 from jarvis.tools.local.screenshot import ScreenshotTool
 from jarvis.tools.registry import EmptyArgs
+from tests._typing import fake_module
 
 
 def _install_fake_pyautogui(saver_recorder: list[Path]) -> types.ModuleType:
     """Install a fake `pyautogui` module that returns an object whose
     .save(path) records the saved path. The real pyautogui pulls in
     mouse/keyboard hooks; we don't want that in unit tests."""
-    fake = types.ModuleType("pyautogui")
-    fake.screenshot = MagicMock()
     image = MagicMock()
     image.save.side_effect = lambda p: saver_recorder.append(Path(p))
-    fake.screenshot.return_value = image
-    return fake
+    return fake_module("pyautogui", screenshot=MagicMock(return_value=image))
 
 
 async def test_saves_png_to_screenshots_dir_with_timestamp(tmp_path):

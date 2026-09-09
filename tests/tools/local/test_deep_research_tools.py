@@ -15,6 +15,7 @@ from jarvis.tools.local.deep_research_tools import (
     ResumeDeepResearchTool,
 )
 from jarvis.tools.registry import EmptyArgs
+from tests._typing import output_text
 
 
 def _run(coro):
@@ -59,7 +60,7 @@ def test_delete_by_query_calls_callback():
     assert result.success is True
     by_query.assert_called_once_with("quantum")
     active.assert_not_called()
-    assert "quantum" in (result.output or "").lower()
+    assert "quantum" in output_text(result).lower()
 
 
 def test_delete_empty_query_uses_active():
@@ -92,4 +93,4 @@ def test_delete_all_empty():
     tool = DeleteAllDeepResearchTool(delete_all=lambda: 0)
     result = _run(tool.execute(EmptyArgs()))
     assert result.success is True
-    assert "no" in (result.output or "").lower()
+    assert "no" in output_text(result).lower()
