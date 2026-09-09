@@ -30,7 +30,28 @@ class TypeIntoActiveWindowTool:
         "or 'paste <text> into <app>'."
     )
     args_schema = TypeIntoActiveWindowArgs
-    requires_confirmation: bool = False
+    # The one tool in the built-in set that the user is asked about
+    # before it runs. It synthesises arbitrary keystrokes into whatever
+    # window happens to hold focus at the moment of execution — which
+    # the LLM cannot see and the user may have changed since speaking.
+    # A terminal, a browser address bar and a password field are all
+    # plausible targets, and none of them can be undone afterwards. It
+    # is already disabled by default in ToolsConfig; the gate is what
+    # makes turning it on a reasonable thing to do.
+    requires_confirmation: bool = True
+
+    def confirmation_summary(self, args: TypeIntoActiveWindowArgs) -> str:
+        """What the user reads in the prompt.
+
+        The description is written for the model ("only use when the
+        user explicitly says..."), which is not the question being asked
+        here. The question is what is about to be typed, and where — so
+        this leads with the length and lets the dialog's argument box
+        show the text itself."""
+        return (
+            f"Type {len(args.text)} character(s) as simulated keystrokes "
+            "into whichever window has keyboard focus right now."
+        )
 
     async def execute(self, args: TypeIntoActiveWindowArgs) -> ToolResult:
         if len(args.text) > _MAX_TYPE_LENGTH:

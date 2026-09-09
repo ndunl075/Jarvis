@@ -341,14 +341,27 @@ def test_setup_local_tools_idempotent_into_fresh_registry():
         setup_local_tools(reg)
 
 
-def test_all_local_tools_default_requires_confirmation_false():
-    """Phase 4 contract: requires_confirmation UX is deferred. No
-    shipped tool may set the flag True."""
+def test_the_confirmation_gated_local_tool_set_is_pinned():
+    """Exactly which built-ins prompt the user, pinned so it changes only
+    on purpose.
+
+    Both directions matter. Adding a tool to this set puts a modal dialog
+    in front of it, which is a UX decision, and removing one from it
+    silently drops a safety gate — the case this pins hardest, since
+    nothing else in the suite would notice type_into_active_window
+    quietly going back to running unannounced.
+
+    Note this iterates every *registered* tool, not list_enabled():
+    type_into_active_window is disabled by default in ToolsConfig, so a
+    list_enabled() loop would not see it at all."""
     from jarvis.tools import setup_local_tools
+    from jarvis.tools.catalogue import local_tool_names
     reg = ToolRegistry(ToolsConfig())
     setup_local_tools(reg)
-    for tool in reg.list_enabled():
-        assert tool.requires_confirmation is False, (
-            f"{tool.name} ships with requires_confirmation=True but the "
-            "UX is not yet wired (see registry.py header)"
-        )
+
+    gated = sorted(
+        name
+        for name in local_tool_names()
+        if (t := reg.get(name)) is not None and t.requires_confirmation
+    )
+    assert gated == ["type_into_active_window"]

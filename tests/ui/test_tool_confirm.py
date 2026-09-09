@@ -498,3 +498,27 @@ def test_registry_refuses_the_tool_when_the_dialog_is_denied(
     assert result.success is False
     assert "not approved" in (result.error or "")
     assert tool.typed == []
+
+
+def test_the_real_typing_tool_is_summarised_in_the_dialog(
+    qapp, audio_loop, confirmer
+):
+    """The shipped tool, its shipped flag, and what the user actually
+    sees — the one test that would catch the flag being flipped back."""
+    from jarvis.tools.local.type_into_active_window import TypeIntoActiveWindowTool
+
+    registry = ToolRegistry(ToolsConfig(enabled={}), confirmer=confirmer)
+    _register(registry, TypeIntoActiveWindowTool())
+
+    pending = asyncio.run_coroutine_threadsafe(
+        registry.execute("type_into_active_window", {"text": "rm -rf /"}),
+        audio_loop,
+    )
+    assert _pump(qapp, lambda: confirmer._dialog is not None)
+    dialog = confirmer._dialog
+    assert "8 character(s)" in dialog.summary_label.text()
+    assert "rm -rf /" in dialog.arguments_view.toPlainText()
+
+    dialog.deny_button.click()
+    assert _pump(qapp, pending.done)
+    assert pending.result(timeout=1.0).success is False
