@@ -95,38 +95,32 @@ jobs:
       #   libxkbcommon-x11-0  - QtGui keyboard mapping
       #   libdbus-1-3         - Qt's D-Bus tray/theme integration
       # sounddevice needs libportaudio2 at import time for the same reason.
-      # Two failure modes are handled here, and they are different.
+      # The runner image ships third-party apt sources this project does
+      # not use. Google Chrome's has been serving a Packages.gz whose hash
+      # does not match its own Release file, which makes `apt-get update`
+      # exit 100 even though every Ubuntu archive fetched cleanly -- enough
+      # to skip ruff, pyright and pytest on a docs-only change.
       #
-      # 1. The runner image ships third-party apt sources this project does
-      #    not use -- Google Chrome's among them. Its index has served a
-      #    Packages.gz whose hash does not match its own Release file, which
-      #    makes `apt-get update` exit 100 even though every Ubuntu archive
-      #    fetched cleanly. That failed a docs-only PR twice with byte-
-      #    identical hashes, so it is a stale index and not a transient
-      #    race; retrying cannot fix it. Every library below comes from the
-      #    Ubuntu archives, so those sources are simply removed first.
+      # Two failed runs produced byte-identical hashes, so it is a stale
+      # published index rather than a transient race: retrying cannot fix
+      # it. The sources are matched by CONTENT rather than filename,
+      # because the image uses deb822 `.sources` files and a `*.list` glob
+      # silently matches nothing.
       #
-      # 2. Ubuntu updates its mirrors per-file, so a fetch that lands
-      #    mid-sync genuinely can fail transiently. That one IS worth a
-      #    retry, and the cached partial index has to go between attempts
-      #    because it is what the mismatch is against.
-      #
-      # If all three attempts fail the install still runs and still fails
-      # the job. This tolerates a flaky fetch; it does not hide a broken one.
+      # Everything installed below comes from the Ubuntu archives.
       - name: Install Qt and audio system libraries (Linux)
         if: runner.os == 'Linux'
         run: |
           set -euo pipefail
-          sudo rm -f /etc/apt/sources.list.d/*google*.list \
-                     /etc/apt/sources.list.d/*chrome*.list || true
-          for attempt in 1 2 3; do
-            if sudo apt-get update; then
-              break
-            fi
-            echo "::warning::apt-get update failed (attempt $attempt/3); clearing lists and retrying"
-            sudo rm -rf /var/lib/apt/lists/*
-            sleep $((attempt * 5))
-          done
+          # Any apt source referencing a host we do not need, whatever the
+          # file is called or which format it uses.
+          sudo grep -rlE 'dl\.google\.com|packages\.microsoft\.com' \
+            /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null \
+            | xargs -r sudo rm -f
+          echo "remaining apt sources:"
+          ls -1 /etc/apt/sources.list.d/ 2>/dev/null || true
+
+          sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libegl1 \
             libgl1 \
