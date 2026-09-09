@@ -60,6 +60,7 @@ async def _dispatch(event: ConfigChanged, **kwargs) -> None:
         "resource_monitor": _make_monitor(),
         "source": MagicMock(unload=AsyncMock(), load=AsyncMock()),
         "mcp_manager": MagicMock(reload_from_config=AsyncMock()),
+        "registry": MagicMock(unregister=MagicMock(), register=MagicMock()),
     }
     defaults.update(kwargs)
     await _handle_config_changed(event, **defaults)
