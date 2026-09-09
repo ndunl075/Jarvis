@@ -195,6 +195,14 @@ def _setup_logging(level: int = logging.WARNING) -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
+    # ...but Jarvis's own modules go to DEBUG. The audio-stack
+    # diagnostics this harness exists to show ([boot] rate/resample
+    # lines, the Piper length_scale, first-synth timing, the router's
+    # tool choices) are log records now rather than prints, and this
+    # console is the only place a developer running the harness can see
+    # them. Root stays at `level` so faster-whisper/onnxruntime/httpx
+    # chatter is still filtered out.
+    logging.getLogger("jarvis").setLevel(logging.DEBUG)
 
 
 def _wire_printers(bus: EventBus) -> None:

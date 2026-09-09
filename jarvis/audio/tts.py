@@ -350,9 +350,15 @@ class PiperTTS:
                 f"could not open audio output stream at {self._sample_rate} Hz: {e}"
             ) from e
         # Boot diagnostic so the effective Piper pace is visible at runtime.
-        # print() (not log.info) keeps it on stdout without a log-level bump,
-        # matching the surrounding [boot] device/rate lines.
-        print(f"[boot] piper length_scale={self._effective_length_scale():.3f}")
+        # This used to be a print() to stay on stdout without a log-level
+        # bump. It doesn't need one: this is a once-per-load boot fact an
+        # operator wants at default verbosity, so INFO shows it without any
+        # bump at all -- and unlike stdout it reaches the log file and the
+        # in-app log viewer, which is where a user actually looks. The
+        # windowed PyInstaller build has no stdout to print to anyway.
+        log.info(
+            "[boot] piper length_scale=%.3f", self._effective_length_scale()
+        )
         self.is_loaded = True
 
     async def unload(self) -> None:
@@ -632,9 +638,12 @@ class PiperTTS:
             self._callback_wired = True
             self._drained_event.set()
             if rate != piper_rate:
-                print(f"[boot] output opened at {rate}Hz, resampling from {piper_rate}Hz")
+                log.info(
+                    "[boot] output opened at %dHz, resampling from %dHz",
+                    rate, piper_rate,
+                )
             else:
-                print(f"[boot] output opened at {rate}Hz (no resample)")
+                log.info("[boot] output opened at %dHz (no resample)", rate)
             return stream, None
         return None, last_err
 
@@ -759,8 +768,12 @@ class PiperTTS:
 
     def _maybe_log_first_synth_duration(self, text: str, total_bytes: int) -> None:
         """One-shot diagnostic so we can see whether Piper actually
-        honoured the SynthesisConfig.length_scale we asked for. Print
-        runs once per PiperTTS instance to avoid spamming."""
+        honoured the SynthesisConfig.length_scale we asked for. Logged
+        once per PiperTTS instance to avoid spamming.
+
+        DEBUG, not INFO: `text` is the assistant's reply to the user, so
+        its length is user-derived. Only the character count is logged,
+        never the text itself."""
         if self._first_synth_logged or total_bytes == 0:
             return
         self._first_synth_logged = True
@@ -769,13 +782,15 @@ class PiperTTS:
         expected_default = max(1, len(text)) * _SECONDS_PER_CHAR_AT_DEFAULT_SCALE
         expected_scaled = expected_default * self._effective_length_scale()
         ratio_vs_default = actual_seconds / expected_default
-        print(
-            f"[tts-debug] first-synth text_chars={len(text)} "
-            f"actual={actual_seconds:.2f}s "
-            f"expected@1.0={expected_default:.2f}s "
-            f"expected@{self._effective_length_scale():.2f}="
-            f"{expected_scaled:.2f}s "
-            f"ratio_vs_default={ratio_vs_default:.2f}"
+        log.debug(
+            "first-synth text_chars=%d actual=%.2fs expected@1.0=%.2fs "
+            "expected@%.2f=%.2fs ratio_vs_default=%.2f",
+            len(text),
+            actual_seconds,
+            expected_default,
+            self._effective_length_scale(),
+            expected_scaled,
+            ratio_vs_default,
         )
 
     def _maybe_time_compress(self, audio_bytes: bytes) -> bytes:

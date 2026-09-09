@@ -708,16 +708,20 @@ class IntentRouter:
     ) -> list[ToolIntent]:
         """Parse, log and de-duplicate one round's tool calls."""
         # Visibility for live tool-decision debugging: every LLM-chosen
-        # tool gets printed alongside the transcription that prompted it.
+        # tool is traced alongside the transcription that prompted it.
         # The pattern path doesn't show up here — those are router-level
-        # decisions, not LLM ones. print (not log.info) keeps the trace
-        # visible without bumping the global level, matching the rest of
-        # the [router] / [boot] diagnostics.
+        # decisions, not LLM ones.
+        #
+        # This is DEBUG, not INFO, for one reason: `transcription` is the
+        # user's speech. It is per-interaction trace that only matters
+        # when someone is asking "why did it call that tool?", so it is
+        # opt-in via Settings -> Log level, and the %r is not formatted
+        # at all until then.
         for tc in raw_tool_calls:
             fn = tc.get("function") or {}
             tool_name = fn.get("name") or "<missing>"
-            print(
-                f"[router] llm-chose-tool={tool_name} for={transcription!r}"
+            log.debug(
+                "[router] llm-chose-tool=%s for=%r", tool_name, transcription
             )
         if len(raw_tool_calls) > 1:
             log.info(
