@@ -213,6 +213,15 @@ The registry's rules matter as much as the shape:
   colliding tool. No silent overwrites.
 - **`list_enabled()` is the source of truth for visibility.** Per-tool
   enable/disable comes from config and is re-checked on every dispatch.
+- **`requires_confirmation = True` puts a modal dialog in front of the tool.**
+  `execute()` will not dispatch it until the user clicks Approve; the prompt
+  default-denies on timeout, on Escape and on close. Optionally add a
+  `confirmation_summary(args) -> str` method — the `description` is written for
+  the LLM, and the prompt needs a sentence written for the user. The gate fails
+  closed: with no confirmer wired (any headless context, including the whole
+  test suite) the tool is refused rather than run. Set the flag only for
+  something a misheard sentence should not be able to do unannounced; see
+  `type_into_active_window` (gated) and `lock_screen` (deliberately not).
 - Tool names must match `TOOL_NAME_REGEX` (`[a-zA-Z0-9_-]{1,64}`) — the
   constraint the Ollama/OpenAI function-calling surface imposes.
 
