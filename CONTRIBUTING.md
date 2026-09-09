@@ -99,8 +99,7 @@ python -m jarvis.dev.audio_loopback
 
 Run all three before opening a pull request. CI
 ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs exactly these
-commands. Ruff and pytest are blocking gates; pyright is advisory for now (see
-above).
+commands, and all three are blocking gates.
 
 The matrix is Windows on Python 3.11 and 3.12, and **Linux on 3.11 only**.
 Linux is capped at 3.11 because `openwakeword` requires
