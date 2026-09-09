@@ -2,21 +2,28 @@
 
 Public surface:
   - Tool, ToolResult, EmptyArgs:            protocol + return type
+  - VoicePattern, VoiceRoutable:           optional voice-routing extension
   - ToolRegistry, ToolNameCollisionError:  registry + collision exception
   - TOOL_NAME_REGEX:                       shared name-validity regex
 
 Local tool implementations live under jarvis/tools/local/. MCP-adapted
-tools live under jarvis/tools/mcp_client.py (Phase 4 Task 3).
+tools live under jarvis/tools/mcp_client.py (Phase 4 Task 3). The static
+catalogue of local tool classes — which drives the router's voice-pattern
+table and the Settings -> Tools list — is jarvis/tools/catalogue.py.
 """
 
 from jarvis.tools.mcp_client import MCPManager, MCPServerConnection, MCPTool
 from jarvis.tools.registry import (
+    PRIORITY_CATCH_ALL,
+    PRIORITY_DEFAULT,
     TOOL_NAME_REGEX,
     EmptyArgs,
     Tool,
     ToolNameCollisionError,
     ToolRegistry,
     ToolResult,
+    VoicePattern,
+    VoiceRoutable,
 )
 
 
@@ -108,6 +115,8 @@ def setup_local_tools(
 
 
 __all__ = [
+    "PRIORITY_CATCH_ALL",
+    "PRIORITY_DEFAULT",
     "TOOL_NAME_REGEX",
     "EmptyArgs",
     "MCPManager",
@@ -117,5 +126,7 @@ __all__ = [
     "ToolNameCollisionError",
     "ToolRegistry",
     "ToolResult",
+    "VoicePattern",
+    "VoiceRoutable",
     "setup_local_tools",
 ]

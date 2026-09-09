@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime
+from typing import ClassVar
 
 from pydantic import BaseModel
 
 from jarvis.platform import windows as winplat
-from jarvis.tools.registry import EmptyArgs, ToolResult
+from jarvis.tools.registry import EmptyArgs, ToolResult, VoicePattern
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +23,10 @@ class ScreenshotTool:
     )
     args_schema: type[BaseModel] = EmptyArgs
     requires_confirmation: bool = False
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        # "screenshot", "take screenshot", "take a screenshot".
+        VoicePattern(regex=r"^(?:take\s+(?:a\s+)?)?screenshot$", priority=20),
+    )
 
     async def execute(self, args: EmptyArgs) -> ToolResult:
         def _grab_and_save() -> str:

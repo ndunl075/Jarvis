@@ -1,0 +1,1141 @@
+{
+  "": {
+    "kind": "none"
+  },
+  "   open   spotify   ": {
+    "args": {
+      "name": "spotify"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_app"
+  },
+  "(silent — type to filter, Enter to run)": {
+    "kind": "none"
+  },
+  "Add this to my meeting note: bring the slides": {
+    "args": {
+      "content": "bring the slides",
+      "title": "meeting"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "append_to_note"
+  },
+  "Delete the groceries note": {
+    "args": {
+      "title": "groceries"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "delete_note"
+  },
+  "Hey Jarvis": {
+    "kind": "none"
+  },
+  "Hey Jarvis, volume up.": {
+    "args": {
+      "action": "up"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "volume"
+  },
+  "Hey Jarvis, what time is it?": {
+    "kind": "speak",
+    "text": "It's 1:05 PM, sir."
+  },
+  "OPEN SPOTIFY!!": {
+    "args": {
+      "name": "spotify"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_app"
+  },
+  "Paste my last copy": {
+    "args": {
+      "index": 1
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "paste_clipboard_item"
+  },
+  "Play Rachmaninoff": {
+    "kind": "none"
+  },
+  "Press Ctrl+Shift+P": {
+    "kind": "none"
+  },
+  "Read my groceries note": {
+    "args": {
+      "title": "groceries"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "read_note"
+  },
+  "Take a note about the roof leak": {
+    "args": {
+      "content": "the roof leak"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "take_note"
+  },
+  "Tray icon → Show tutorial": {
+    "kind": "none"
+  },
+  "What time is it": {
+    "kind": "speak",
+    "text": "It's 1:05 PM, sir."
+  },
+  "add another item to my groceries note: paper towels": {
+    "kind": "none"
+  },
+  "add this to my meeting note: agenda finalized": {
+    "args": {
+      "content": "agenda finalized",
+      "title": "meeting"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "append_to_note"
+  },
+  "append this to the groceries note: rice": {
+    "args": {
+      "content": "rice",
+      "title": "groceries"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "append_to_note"
+  },
+  "be quiet": {
+    "kind": "stop"
+  },
+  "boot up Stardew Valley": {
+    "kind": "none"
+  },
+  "bring up my clipboard history": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_clipboard_history"
+  },
+  "bring up my notes": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_notes"
+  },
+  "bring up the dashboard": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_dashboard"
+  },
+  "bring up the logs": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_logs"
+  },
+  "can you open spotify": {
+    "args": {
+      "name": "spotify"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_app"
+  },
+  "can you see my screen": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "see_screen"
+  },
+  "cancel that download": {
+    "kind": "none"
+  },
+  "clear all deep research sessions": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "delete_all_deep_research"
+  },
+  "clear my clipboard": {
+    "kind": "none"
+  },
+  "clear my clipboard history": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "clear_clipboard_history"
+  },
+  "clear the clipboard history": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "clear_clipboard_history"
+  },
+  "close Chrome": {
+    "kind": "none"
+  },
+  "close Spotify": {
+    "kind": "none"
+  },
+  "close deep research": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "close_deep_research"
+  },
+  "close logs": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "close_logs"
+  },
+  "close my notes": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "close_notes"
+  },
+  "close notes": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "close_notes"
+  },
+  "close research": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "close_research"
+  },
+  "close the clipboard history": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "close_clipboard_history"
+  },
+  "close the dashboard": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "close_dashboard"
+  },
+  "close the logs": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "close_logs"
+  },
+  "continue": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "read_more"
+  },
+  "continue deep research": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "resume_deep_research"
+  },
+  "copy research": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "copy_research"
+  },
+  "copy that": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "copy_research"
+  },
+  "copy the summary": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "copy_research"
+  },
+  "could you please open spotify": {
+    "args": {
+      "name": "spotify"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_app"
+  },
+  "deep research nuclear fusion": {
+    "args": {
+      "query": "nuclear fusion"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "deep_research"
+  },
+  "deep research on the Krebs cycle": {
+    "args": {
+      "query": "the krebs cycle"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "deep_research"
+  },
+  "delete all deep research": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "delete_all_deep_research"
+  },
+  "delete deep research on solar power": {
+    "args": {
+      "query": "solar power"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "delete_deep_research"
+  },
+  "delete the current note": {
+    "args": {
+      "title": ""
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "delete_note"
+  },
+  "delete the deep research": {
+    "args": {
+      "query": ""
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "delete_deep_research"
+  },
+  "delete the groceries note": {
+    "args": {
+      "title": "groceries"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "delete_note"
+  },
+  "delete the report note": {
+    "args": {
+      "title": "report"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "delete_note"
+  },
+  "delete this note": {
+    "args": {
+      "title": ""
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "delete_note"
+  },
+  "describe my screen": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "see_screen"
+  },
+  "describe the display": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "see_screen"
+  },
+  "disable ultra research": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "disable_deep_research_ultra"
+  },
+  "do deep research on quantum computing": {
+    "args": {
+      "query": "quantum computing"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "deep_research"
+  },
+  "enable ultra research": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "enable_deep_research_ultra"
+  },
+  "go to sleep": {
+    "kind": "none"
+  },
+  "google AI news": {
+    "args": {
+      "url": "https://www.google.com/search?q=ai+news"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_url"
+  },
+  "google puppies": {
+    "args": {
+      "url": "https://www.google.com/search?q=puppies"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_url"
+  },
+  "google the weather in oslo": {
+    "args": {
+      "url": "https://www.google.com/search?q=the+weather+in+oslo"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_url"
+  },
+  "hey jarvis, open spotify": {
+    "args": {
+      "name": "spotify"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_app"
+  },
+  "how is my computer doing": {
+    "kind": "none"
+  },
+  "how much memory am I using": {
+    "kind": "none"
+  },
+  "jarvis, deep research on tidal power": {
+    "args": {
+      "query": "tidal power"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "deep_research"
+  },
+  "jarvis, normal deep research": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "disable_deep_research_ultra"
+  },
+  "jarvis, open my workspace": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "launch_workspace"
+  },
+  "jot this down buy cat food": {
+    "args": {
+      "content": "buy cat food"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "take_note"
+  },
+  "jot this down: buy milk and eggs": {
+    "args": {
+      "content": "buy milk and eggs"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "take_note"
+  },
+  "keep going": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "read_more"
+  },
+  "launch Cyberpunk": {
+    "kind": "none"
+  },
+  "launch workspace": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "launch_workspace"
+  },
+  "lock my pc": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "lock_screen"
+  },
+  "lock pc": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "lock_screen"
+  },
+  "lock the screen": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "lock_screen"
+  },
+  "look at my screen": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "see_screen"
+  },
+  "look up sourdough": {
+    "args": {
+      "query": "sourdough"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "research"
+  },
+  "look up the Roman Empire": {
+    "args": {
+      "query": "the roman empire"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "research"
+  },
+  "mute": {
+    "kind": "none"
+  },
+  "never mind": {
+    "kind": "stop"
+  },
+  "note that the boiler needs servicing": {
+    "args": {
+      "content": "the boiler needs servicing"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "take_note"
+  },
+  "open": {
+    "kind": "none"
+  },
+  "open Chrome": {
+    "args": {
+      "name": "chrome"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_app"
+  },
+  "open Notepad": {
+    "args": {
+      "name": "notepad"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_app"
+  },
+  "open Spotify": {
+    "args": {
+      "name": "spotify"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_app"
+  },
+  "open capabilities": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_help"
+  },
+  "open clipboard history": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_clipboard_history"
+  },
+  "open dashboard": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_dashboard"
+  },
+  "open github": {
+    "args": {
+      "name": "github"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_app"
+  },
+  "open help": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_help"
+  },
+  "open logs": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_logs"
+  },
+  "open my capabilities": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_help"
+  },
+  "open my clipboard history": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_clipboard_history"
+  },
+  "open my dashboard": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_dashboard"
+  },
+  "open my notes": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_notes"
+  },
+  "open my workspace": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "launch_workspace"
+  },
+  "open notes": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_notes"
+  },
+  "open steam": {
+    "args": {
+      "name": "steam"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_app"
+  },
+  "open system stats": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_dashboard"
+  },
+  "open the dashboard": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_dashboard"
+  },
+  "open the logs": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_logs"
+  },
+  "open the notes": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_notes"
+  },
+  "open workspace": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "launch_workspace"
+  },
+  "open youtube dot com": {
+    "args": {
+      "name": "youtube dot com"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_app"
+  },
+  "paste item 12": {
+    "args": {
+      "index": 12
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "paste_clipboard_item"
+  },
+  "paste item 3": {
+    "args": {
+      "index": 3
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "paste_clipboard_item"
+  },
+  "paste item 7": {
+    "args": {
+      "index": 7
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "paste_clipboard_item"
+  },
+  "paste last copy": {
+    "args": {
+      "index": 1
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "paste_clipboard_item"
+  },
+  "paste my last copy": {
+    "args": {
+      "index": 1
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "paste_clipboard_item"
+  },
+  "pause deep research": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "pause_deep_research"
+  },
+  "play Bohemian Rhapsody": {
+    "kind": "none"
+  },
+  "play Pink Floyd": {
+    "kind": "none"
+  },
+  "play some jazz": {
+    "kind": "none"
+  },
+  "read me my groceries notes": {
+    "args": {
+      "title": "groceries"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "read_note"
+  },
+  "read more": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "read_more"
+  },
+  "read my current note": {
+    "args": {
+      "title": ""
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "read_note"
+  },
+  "read my meeting note": {
+    "args": {
+      "title": "meeting"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "read_note"
+  },
+  "read the current note": {
+    "args": {
+      "title": ""
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "read_note"
+  },
+  "read the monitor": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "see_screen"
+  },
+  "read the report note": {
+    "args": {
+      "title": "report"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "read_note"
+  },
+  "read this note": {
+    "args": {
+      "title": ""
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "read_note"
+  },
+  "remember this the bins go out Tuesday": {
+    "args": {
+      "content": "the bins go out tuesday"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "take_note"
+  },
+  "remove all deep research history": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "delete_all_deep_research"
+  },
+  "remove deep research": {
+    "args": {
+      "query": ""
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "delete_deep_research"
+  },
+  "remove the deep research about wind farms": {
+    "args": {
+      "query": "wind farms"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "delete_deep_research"
+  },
+  "research black holes": {
+    "args": {
+      "query": "black holes"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "research"
+  },
+  "research quantum computing": {
+    "args": {
+      "query": "quantum computing"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "research"
+  },
+  "resume deep research": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "resume_deep_research"
+  },
+  "screenshot": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "screenshot"
+  },
+  "search for a decent risotto": {
+    "args": {
+      "url": "https://www.google.com/search?q=a+decent+risotto"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_url"
+  },
+  "search for puppies": {
+    "args": {
+      "url": "https://www.google.com/search?q=puppies"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_url"
+  },
+  "search the web for tide tables": {
+    "args": {
+      "url": "https://www.google.com/search?q=the+web+for+tide+tables"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_url"
+  },
+  "search up how to poach an egg": {
+    "args": {
+      "url": "https://www.google.com/search?q=how+to+poach+an+egg"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_url"
+  },
+  "search up pasta recipes": {
+    "args": {
+      "url": "https://www.google.com/search?q=pasta+recipes"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_url"
+  },
+  "see my screen": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "see_screen"
+  },
+  "show capabilities": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_help"
+  },
+  "show clipboard history": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_clipboard_history"
+  },
+  "show dashboard": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_dashboard"
+  },
+  "show errors": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_logs"
+  },
+  "show help": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_help"
+  },
+  "show logs": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_logs"
+  },
+  "show me errors": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_logs"
+  },
+  "show me the log": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_logs"
+  },
+  "show me the system stats": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_dashboard"
+  },
+  "show notes": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_notes"
+  },
+  "shut up": {
+    "kind": "stop"
+  },
+  "start workspace": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "launch_workspace"
+  },
+  "stop": {
+    "kind": "stop"
+  },
+  "stop listening": {
+    "kind": "none"
+  },
+  "stop the music": {
+    "kind": "none"
+  },
+  "take a note about the meeting being moved to Friday": {
+    "args": {
+      "content": "the meeting being moved to friday"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "take_note"
+  },
+  "take a screenshot": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "screenshot"
+  },
+  "take screenshot": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "screenshot"
+  },
+  "tell me a joke": {
+    "kind": "none"
+  },
+  "that's enough": {
+    "kind": "stop"
+  },
+  "turn off deep research ultra": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "disable_deep_research_ultra"
+  },
+  "turn on deep research ultra": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "enable_deep_research_ultra"
+  },
+  "type hello world": {
+    "kind": "none"
+  },
+  "type my email address": {
+    "kind": "none"
+  },
+  "unmute": {
+    "kind": "none"
+  },
+  "use normal deep research": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "disable_deep_research_ultra"
+  },
+  "use ultra mode": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "enable_deep_research_ultra"
+  },
+  "volume down": {
+    "args": {
+      "action": "down"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "volume"
+  },
+  "volume mute": {
+    "args": {
+      "action": "mute"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "volume"
+  },
+  "volume unmute": {
+    "args": {
+      "action": "unmute"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "volume"
+  },
+  "volume up": {
+    "args": {
+      "action": "up"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "volume"
+  },
+  "weather today": {
+    "kind": "none"
+  },
+  "what": {
+    "kind": "none"
+  },
+  "what can i say": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_help"
+  },
+  "what can you do": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "open_help"
+  },
+  "what can you see on my screen": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "see_screen"
+  },
+  "what do you see": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "see_screen"
+  },
+  "what have I copied": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "show_clipboard_history"
+  },
+  "what is on the display": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "see_screen"
+  },
+  "what is the time": {
+    "kind": "speak",
+    "text": "It's 1:05 PM, sir."
+  },
+  "what's on my clipboard": {
+    "kind": "none"
+  },
+  "what's on my screen": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "see_screen"
+  },
+  "what's the time": {
+    "kind": "speak",
+    "text": "It's 1:05 PM, sir."
+  },
+  "what's the weather": {
+    "kind": "none"
+  },
+  "would you please take a screenshot": {
+    "args": {},
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "screenshot"
+  },
+  "write this down call the dentist": {
+    "args": {
+      "content": "call the dentist"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "take_note"
+  },
+  "write this down: project Phoenix kicks off Monday": {
+    "args": {
+      "content": "project phoenix kicks off monday"
+    },
+    "kind": "tool",
+    "spoken_response": null,
+    "tool": "take_note"
+  }
+}

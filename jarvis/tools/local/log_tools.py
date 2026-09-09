@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import ClassVar
 
-from jarvis.tools.registry import EmptyArgs, ToolResult
+from jarvis.tools.registry import EmptyArgs, ToolResult, VoicePattern
 
 
 class ShowLogsTool:
@@ -16,6 +17,14 @@ class ShowLogsTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    # 320: must beat open_app's catch-all for "open logs".
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^(?:show|open|bring\s+up)\s+(?:me\s+)?(?:the\s+|my\s+)?logs?$",
+            priority=320,
+        ),
+        VoicePattern(regex=r"^show\s+(?:me\s+)?errors$", priority=330),
+    )
 
     def __init__(self, *, on_open: Callable[[], None]) -> None:
         self._on_open = on_open
@@ -32,6 +41,9 @@ class CloseLogsTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(regex=r"^close\s+(?:the\s+|my\s+)?logs?$", priority=340),
+    )
 
     def __init__(self, *, on_close: Callable[[], None]) -> None:
         self._on_close = on_close

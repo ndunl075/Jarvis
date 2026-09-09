@@ -1,9 +1,39 @@
 """Single source of truth for "what can Jarvis do" — used by the Help
-panel and the Settings → Help tab.
+panel, the Settings → Help tab, and the command palette.
 
 Each category groups related capabilities. Each capability has a plain-
 English name, a one-sentence description aimed at non-technical users,
-and at least one example phrase the user can say out loud.
+at least one example phrase the user can say out loud, and `tools`: the
+registry names it is backed by.
+
+Why this catalogue is hand-written and not generated from the registry
+---------------------------------------------------------------------
+The obvious follow-on to moving voice patterns onto the tools (see
+`jarvis.tools.registry.VoicePattern`) is to move this catalogue there
+too. It was tried and rejected, because a capability is a *user task* and
+a tool is an *implementation*, and the two do not line up:
+
+- The mapping is many-to-many, and grouping by tool reads worse. "Deep
+  research" is one thing a user does; it is six tools (start, pause,
+  resume, close, and the two ultra toggles). "Open or close notes" is one
+  card with one description; it is two tools. Generating one card per
+  tool would turn 32 human-scale entries into 42 mechanical ones and
+  split several of them mid-explanation.
+- Five capabilities have no tool at all — waking, sleeping, muting, the
+  command palette, and the tutorial. Their "examples" are not even
+  utterances ("Press Ctrl+Shift+P", "Tray icon → Show tutorial"). A
+  generated catalogue would still need a hand-written list beside it for
+  these, i.e. two mechanisms where there is now one.
+- Category membership, category order, the glyphs, and the order of cards
+  within a category are all editorial. The Help panel is read top to
+  bottom; that sequence is not derivable from anything the tools know.
+
+What IS fixed here is the drift the registry could have prevented: a card
+describing a capability the registry does not have, or a tool nobody
+documents. `tools` states the link explicitly and
+`tests/ui/test_capabilities.py` checks it against
+`jarvis.tools.catalogue` in both directions, so the prose stays editorial
+while the claims stay true.
 """
 
 from __future__ import annotations
@@ -16,6 +46,11 @@ class Capability:
     name: str
     description: str
     examples: tuple[str, ...]
+    # Registry tool names backing this capability. Empty for the handful
+    # of capabilities that are not tools (wake / sleep / mute, the
+    # command palette, the tutorial). Verified against the tool catalogue
+    # by tests/ui/test_capabilities.py — see module docstring.
+    tools: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -37,6 +72,7 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "Then speak your command in one breath."
                 ),
                 examples=("Hey Jarvis", "Hey Jarvis, what time is it?"),
+                tools=(),
             ),
             Capability(
                 name="Put Jarvis to sleep",
@@ -45,6 +81,7 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "stays quick. Wake him back up with the wake phrase."
                 ),
                 examples=("go to sleep", "stop listening"),
+                tools=(),
             ),
             Capability(
                 name="Mute or unmute",
@@ -53,6 +90,7 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "on calls or during music."
                 ),
                 examples=("mute", "unmute"),
+                tools=(),
             ),
         ),
     ),
@@ -71,11 +109,13 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "open Chrome",
                     "open Notepad",
                 ),
+                tools=("open_app",),
             ),
             Capability(
                 name="Close an app",
                 description="Closes a running program by name.",
                 examples=("close Spotify", "close Chrome"),
+                tools=("close_app",),
             ),
             Capability(
                 name="Open your whole workspace",
@@ -87,11 +127,13 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "open my workspace",
                     "launch workspace",
                 ),
+                tools=("launch_workspace",),
             ),
             Capability(
                 name="Launch a Steam game",
                 description="Opens a game in your Steam library by title.",
                 examples=("launch Cyberpunk", "boot up Stardew Valley"),
+                tools=("launch_steam_game",),
             ),
         ),
     ),
@@ -110,11 +152,13 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "play Pink Floyd",
                     "play Bohemian Rhapsody",
                 ),
+                tools=("play_youtube_music",),
             ),
             Capability(
                 name="Change volume",
                 description="System volume up, down, mute, or unmute.",
                 examples=("volume up", "volume down", "mute", "unmute"),
+                tools=("volume",),
             ),
         ),
     ),
@@ -130,11 +174,13 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "google AI news",
                     "search up pasta recipes",
                 ),
+                tools=("open_url",),
             ),
             Capability(
                 name="Open a website",
                 description="Opens any URL you tell him to.",
                 examples=("open youtube dot com", "open github"),
+                tools=("open_url",),
             ),
         ),
     ),
@@ -152,6 +198,12 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "research black holes",
                     "look up the Roman Empire",
                 ),
+                tools=(
+                    "research",
+                    "close_research",
+                    "read_more",
+                    "copy_research",
+                ),
             ),
             Capability(
                 name="Deep research",
@@ -167,6 +219,14 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "pause deep research",
                     "resume deep research",
                 ),
+                tools=(
+                    "deep_research",
+                    "pause_deep_research",
+                    "resume_deep_research",
+                    "close_deep_research",
+                    "enable_deep_research_ultra",
+                    "disable_deep_research_ultra",
+                ),
             ),
             Capability(
                 name="Delete research",
@@ -176,6 +236,10 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                 examples=(
                     "delete deep research on solar power",
                     "delete all deep research",
+                ),
+                tools=(
+                    "delete_deep_research",
+                    "delete_all_deep_research",
                 ),
             ),
         ),
@@ -195,6 +259,7 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "jot this down: buy milk and eggs",
                     "write this down: project Phoenix kicks off Monday",
                 ),
+                tools=("take_note",),
             ),
             Capability(
                 name="Open or close notes",
@@ -203,6 +268,10 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "open my notes",
                     "show notes",
                     "close notes",
+                ),
+                tools=(
+                    "open_notes",
+                    "close_notes",
                 ),
             ),
             Capability(
@@ -215,6 +284,7 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "add this to my meeting note: agenda finalized",
                     "add another item to my groceries note: paper towels",
                 ),
+                tools=("append_to_note",),
             ),
             Capability(
                 name="Read a note",
@@ -223,6 +293,7 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "read my meeting note",
                     "read this note",
                 ),
+                tools=("read_note",),
             ),
             Capability(
                 name="Delete a note",
@@ -231,6 +302,7 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "delete the groceries note",
                     "delete this note",
                 ),
+                tools=("delete_note",),
             ),
         ),
     ),
@@ -249,6 +321,10 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "open dashboard",
                     "how is my computer doing",
                 ),
+                tools=(
+                    "show_dashboard",
+                    "close_dashboard",
+                ),
             ),
             Capability(
                 name="Get the weather",
@@ -257,11 +333,13 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "Set it under Settings → General → Weather location."
                 ),
                 examples=("what's the weather", "weather today"),
+                tools=("get_weather",),
             ),
             Capability(
                 name="Take a screenshot",
                 description="Captures the screen and copies it to clipboard.",
                 examples=("take a screenshot", "screenshot"),
+                tools=("screenshot",),
             ),
             Capability(
                 name="See your screen",
@@ -277,16 +355,19 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "describe my screen",
                     "what do you see",
                 ),
+                tools=("see_screen",),
             ),
             Capability(
                 name="Lock the screen",
                 description="Locks Windows just like Win+L.",
                 examples=("lock the screen", "lock my pc"),
+                tools=("lock_screen",),
             ),
             Capability(
                 name="System stats by voice",
                 description="Reports CPU and memory usage out loud.",
                 examples=("how much memory am I using",),
+                tools=("report_cpu_and_memory_percentages",),
             ),
             Capability(
                 name="Help",
@@ -299,6 +380,7 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "show help",
                     "show capabilities",
                 ),
+                tools=("open_help",),
             ),
         ),
     ),
@@ -313,6 +395,7 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "what's on my clipboard",
                     "clear my clipboard",
                 ),
+                tools=("clipboard",),
             ),
             Capability(
                 name="Type into the focused window",
@@ -324,6 +407,7 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "type hello world",
                     "type my email address",
                 ),
+                tools=("type_into_active_window",),
             ),
             Capability(
                 name="Clipboard history",
@@ -338,6 +422,12 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "paste my last copy",
                     "paste item 3",
                     "clear my clipboard history",
+                ),
+                tools=(
+                    "show_clipboard_history",
+                    "close_clipboard_history",
+                    "clear_clipboard_history",
+                    "paste_clipboard_item",
                 ),
             ),
         ),
@@ -357,6 +447,7 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "Press Ctrl+Shift+P",
                     "(silent — type to filter, Enter to run)",
                 ),
+                tools=(),
             ),
             Capability(
                 name="Live log viewer",
@@ -370,6 +461,10 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                     "show errors",
                     "close logs",
                 ),
+                tools=(
+                    "show_logs",
+                    "close_logs",
+                ),
             ),
             Capability(
                 name="Show the tutorial again",
@@ -380,6 +475,7 @@ CAPABILITY_CATEGORIES: tuple[CapabilityCategory, ...] = (
                 examples=(
                     "Tray icon → Show tutorial",
                 ),
+                tools=(),
             ),
         ),
     ),

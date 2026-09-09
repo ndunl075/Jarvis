@@ -23,14 +23,14 @@ import asyncio
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import BaseModel, Field
 
 from jarvis.core.request_context import current_user_transcription
 from jarvis.platform import windows as winplat
 from jarvis.platform.app_discovery import normalize_open_query
-from jarvis.tools.registry import ToolResult
+from jarvis.tools.registry import PRIORITY_CATCH_ALL, ToolResult, VoicePattern
 
 if TYPE_CHECKING:
     from jarvis.platform.windows_apps import InstalledApp
@@ -99,6 +99,19 @@ class OpenAppTool:
     )
     args_schema = OpenAppArgs
     requires_confirmation: bool = False
+    # PRIORITY_CATCH_ALL: the most permissive pattern in the table and
+    # therefore the LAST one tried. Every specific "open ..." phrase —
+    # "open my notes", "open the dashboard", "open logs", "open my
+    # workspace", "open clipboard history", "open help" — is claimed by
+    # its own tool at a lower number. Lower this and those all start
+    # launching apps by those names instead.
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^open\s+(.+)$",
+            priority=PRIORITY_CATCH_ALL,
+            args=lambda m: {"name": m.group(1)},
+        ),
+    )
 
     def __init__(
         self,

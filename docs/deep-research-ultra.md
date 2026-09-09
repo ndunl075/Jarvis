@@ -161,7 +161,10 @@ Optional Brave/Groq key fields (password echo). Changes persist via `save_config
 | "disable deep research ultra" | `disable_deep_research_ultra` |
 | "use normal deep research" | `disable_deep_research_ultra` |
 
-Pattern layer in `jarvis/llm/intent_router.py` (before topic-based `deep research …`).
+Declared as `voice_patterns` on the tools themselves — `EnableDeepResearchUltraTool` (priority 90) and `DisableDeepResearchUltraTool` (100, 110) in
+`jarvis/tools/local/deep_research_ultra_tools.py`. The priorities put them ahead of the topic-based
+`deep research …` pattern (120), so "use ultra research" toggles the mode instead of researching the topic "ultra".
+`jarvis/llm/intent_router.py` assembles the table from those declarations.
 
 ## Gap-fill loop (Ultra)
 

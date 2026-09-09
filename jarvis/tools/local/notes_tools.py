@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from typing import ClassVar
 
 from pydantic import BaseModel, Field
 
-from jarvis.tools.registry import EmptyArgs, ToolResult
+from jarvis.tools.registry import EmptyArgs, ToolResult, VoicePattern
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +39,15 @@ class TakeNoteTool:
     )
     args_schema = TakeNoteArgs
     requires_confirmation: bool = False
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^(?:take\s+a\s+note|jot\s+(?:this\s+)?down"
+            r"|write\s+(?:this\s+)?down|note\s+that|remember\s+this)"
+            r"(?:\s+(?:that|about|saying))?[:\s]+(.+)$",
+            priority=440,
+            args=lambda m: {"content": m.group(1)},
+        ),
+    )
 
     def __init__(self, *, on_create: Callable[[str, str], str]) -> None:
         self._on_create = on_create
@@ -81,6 +91,14 @@ class AppendToNoteTool:
     )
     args_schema = AppendToNoteArgs
     requires_confirmation: bool = False
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^(?:add|append)\s+(?:this\s+)?to\s+(?:my\s+|the\s+)?"
+            r"(.+?)\s+note[:\s]+(.+)$",
+            priority=490,
+            args=lambda m: {"title": m.group(1), "content": m.group(2)},
+        ),
+    )
 
     def __init__(
         self,
@@ -134,6 +152,20 @@ class ReadNoteTool:
     )
     args_schema = ReadNoteArgs
     requires_confirmation: bool = False
+    # 450 MUST precede 460: "read this note" would otherwise be captured
+    # by the <title> form and read a note titled "this".
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^read\s+(?:this|the\s+current|my\s+current)\s+note$",
+            priority=450,
+            args=lambda m: {"title": ""},
+        ),
+        VoicePattern(
+            regex=r"^read\s+(?:me\s+)?(?:my\s+|the\s+)?(.+?)\s+notes?$",
+            priority=460,
+            args=lambda m: {"title": m.group(1)},
+        ),
+    )
 
     def __init__(
         self,
@@ -173,6 +205,13 @@ class OpenNotesTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    # 420: must beat open_app's catch-all for "open my notes".
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^(?:open|show|bring\s+up)\s+(?:my\s+|the\s+)?notes$",
+            priority=420,
+        ),
+    )
 
     def __init__(self, *, on_open: Callable[[], None]) -> None:
         self._on_open = on_open
@@ -189,6 +228,11 @@ class CloseNotesTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^close\s+(?:my\s+|the\s+)?notes$", priority=430
+        ),
+    )
 
     def __init__(self, *, on_close: Callable[[], None]) -> None:
         self._on_close = on_close
@@ -213,6 +257,19 @@ class DeleteNoteTool:
     )
     args_schema = DeleteNoteArgs
     requires_confirmation: bool = False
+    # 470 MUST precede 480, for the same reason as read_note above.
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^delete\s+(?:this|the\s+current)\s+note$",
+            priority=470,
+            args=lambda m: {"title": ""},
+        ),
+        VoicePattern(
+            regex=r"^delete\s+(?:the\s+)?(.+?)\s+note$",
+            priority=480,
+            args=lambda m: {"title": m.group(1)},
+        ),
+    )
 
     def __init__(
         self,

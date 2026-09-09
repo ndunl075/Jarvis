@@ -216,8 +216,62 @@ The registry's rules matter as much as the shape:
 - Tool names must match `TOOL_NAME_REGEX` (`[a-zA-Z0-9_-]{1,64}`) — the
   constraint the Ollama/OpenAI function-calling surface imposes.
 
-Add a new local tool under `jarvis/tools/local/`, register it in the composition
-root in `jarvis/app.py`, and give it tests under `tests/tools/local/`.
+### Adding a local tool
+
+Four files, in this order:
+
+1. **The tool** — a new class under `jarvis/tools/local/`, satisfying the
+   protocol above. If it should be reachable by a spoken phrase without waiting
+   for the LLM, declare the phrasing right here as a `voice_patterns` class
+   attribute:
+
+   ```python
+   class OpenFridgeTool:
+       name: str = "open_fridge"
+       ...
+       voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+           VoicePattern(
+               regex=r"^(?:show|open)\s+(?:the\s+|my\s+)?fridge$",
+               priority=PRIORITY_DEFAULT,
+           ),
+       )
+   ```
+
+   Patterns are matched against the *normalized* transcription — lowercased,
+   trailing punctuation stripped, leading fillers ("hey jarvis", "could you
+   please") peeled off — so write them lowercase and anchored.
+
+   **`priority` is load-bearing.** The pattern layer is first-match-wins, so a
+   lower number does not just run earlier, it *wins* any utterance two patterns
+   could both match. `open_app`'s `^open\s+(.+)$` sits at `PRIORITY_CATCH_ALL`
+   for exactly this reason: it is what keeps "open my notes" opening the notes
+   panel instead of hunting for an app called "my notes". If your pattern could
+   shadow or be shadowed by another tool's, pick an explicit number and say in a
+   comment what it must beat.
+
+2. **The catalogue** — add the class to `jarvis/tools/catalogue.py`. That one
+   edit is what gives it a settings checkbox and puts its voice patterns in the
+   router's table; there is no separate list to keep in sync.
+
+3. **Registration** — construct it in the composition root, `jarvis/app.py`
+   (or in `setup_local_tools()` if it needs no UI callbacks). This is real
+   wiring, not duplication: it is where a tool is handed the panel callbacks,
+   config section, or Ollama client it needs.
+
+4. **Help** — add or extend a `Capability` in `jarvis/ui/capabilities.py`,
+   listing your tool in its `tools=(...)`. The prose and examples are
+   deliberately hand-written (a capability is a user task; several map to more
+   than one tool, and a few map to none), but the `tools` link is checked
+   against the catalogue in both directions by `tests/ui/test_capabilities.py` —
+   a voice-reachable tool with no Help entry fails the suite.
+
+Then tests under `tests/tools/local/`. If you added or changed a voice pattern,
+also add the utterance to the corpus in
+`tests/llm/test_router_pattern_equivalence.py` and regenerate its goldens with
+`python3 tests/llm/_regen_router_goldens.py`. Review that diff: a changed line
+in `router_pattern_order_golden.json` is a routing-precedence change, and a
+changed value in `router_pattern_golden.json` is an utterance that now goes
+somewhere else. Both need justifying in the PR.
 
 ### Heavy dependencies are imported lazily
 

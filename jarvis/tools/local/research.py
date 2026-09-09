@@ -11,10 +11,11 @@ import logging
 import queue
 import re
 from collections.abc import Awaitable, Callable
+from typing import ClassVar
 
 from pydantic import BaseModel, Field
 
-from jarvis.tools.registry import EmptyArgs, ToolResult
+from jarvis.tools.registry import EmptyArgs, ToolResult, VoicePattern
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +48,20 @@ class ResearchTool:
     )
     args_schema = ResearchArgs
     requires_confirmation: bool = False
+    # 200/210: MUST come after every deep-research pattern (90-190) so
+    # "deep research X" is not shaved to a quick research of "X".
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^research\s+(.+)$",
+            priority=200,
+            args=lambda m: {"query": m.group(1)},
+        ),
+        VoicePattern(
+            regex=r"^look\s+up\s+(.+)$",
+            priority=210,
+            args=lambda m: {"query": m.group(1)},
+        ),
+    )
 
     def __init__(
         self,
@@ -98,6 +113,11 @@ class CloseResearchTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    # 60: must beat `^close\s+deep\s+research$` never (that one is
+    # anchored), but keeps its slot ahead of the research verbs below.
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(regex=r"^close\s+research$", priority=60),
+    )
 
     def __init__(self, *, close_callback: Callable[[], None]) -> None:
         self._close = close_callback
@@ -116,6 +136,14 @@ class ReadMoreTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    # 70: bare "continue" belongs to the research panel. The longer
+    # "continue deep research" (priority 150) is anchored, so it cannot
+    # be swallowed here.
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^(?:read\s+more|continue|keep\s+going)$", priority=70
+        ),
+    )
 
     def __init__(self, *, get_next: Callable[[], str | None]) -> None:
         self._get_next = get_next
@@ -139,6 +167,11 @@ class CopyResearchTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^copy\s+(?:that|research|the\s+summary)$", priority=80
+        ),
+    )
 
     def __init__(self, *, copy_callback: Callable[[], None]) -> None:
         self._copy = copy_callback
