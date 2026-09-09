@@ -934,14 +934,95 @@ class JarvisApp:
         if palette is not None:
             palette.open_palette()
 
+    def _on_research_panel_width(self, width: int) -> None:
+        if self.cfg.ui.research_panel_width != width:
+            self.cfg.ui.research_panel_width = width
+            self._on_config_change()
+
+    def _deep_research_config_provider(self):
+        from jarvis.llm.ollama_client import DEFAULT_ENDPOINT
+        from jarvis.tools.local.deep_research_runner import build_deep_research_config
+
+        return build_deep_research_config(
+            research=self.cfg.research,
+            main_llm_model=self.cfg.llm.model,
+            ollama_endpoint=DEFAULT_ENDPOINT,
+        )
+
+    def _set_deep_research_ultra(self, enabled: bool) -> str:
+        from jarvis.core.config import save_config
+
+        self.cfg.research.ultra_enabled = enabled
+        save_config(self.cfg)
+        if enabled:
+            return (
+                "Deep research Ultra is on, sir. "
+                "Set JARVIS_BRAVE_API_KEY and JARVIS_GROQ_API_KEY for the full stack."
+            )
+        return "Deep research Ultra is off, sir. Using standard local deep research."
+
+    def _take_note(self, title: str, content: str) -> str:
+        return self.notes_panel.create_and_show(title, content)
+
+    def _dr_counts(self) -> tuple[int, int]:
+        sessions = self._list_dr()
+        paused = sum(1 for s in sessions if s.status == "paused")
+        return (len(sessions), paused)
+
+    def _notes_count(self) -> int:
+        return len(self._list_notes())
+
+    async def _consume_palette_text(self, text: str) -> None:
+        try:
+            async for _chunk in self._palette_producer(text):
+                pass
+        except Exception:
+            log.exception("command palette text execution failed")
+
+    def _submit_palette_text(self, text: str) -> None:
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self._consume_palette_text(text), self.audio_loop
+            )
+        except Exception:
+            log.exception("could not schedule palette text onto audio loop")
+
+    def _on_onboarding_finished(self) -> None:
+        if not self.cfg.general.first_run_completed:
+            self.cfg.general.first_run_completed = True
+            try:
+                self._on_config_change()
+            except Exception:
+                log.exception("config persist failed after onboarding finish")
+
     # ------------------------------------------------------------------
     # UI construction
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
-        """Steps 12-14: everything the Qt main thread will own."""
+        """Steps 12-14: everything the Qt main thread will own.
+
+        The order below is run()'s order and matters in two places: the
+        tray is built before every panel it can open (which is why its
+        menu entries read the panel attributes through a lambda), and the
+        onboarding panel is built after the help panel and command palette
+        it links to.
+        """
         self._cfg_snapshot = self.cfg.model_dump(mode="json")
 
+        self._build_tray_and_orb()
+        self._build_research_panel()
+        self._build_deep_research_panel()
+        self._build_notes_panel()
+        self._build_dashboard_panel()
+        self._build_help_panel()
+        self._build_clipboard_panel()
+        self._build_log_panel()
+        self._build_command_palette()
+        self._build_onboarding_panel()
+        self._build_hotkeys()
+
+    def _build_tray_and_orb(self) -> None:
         self.tray = TrayIcon(
             sm=self.sm,
             bus=self.bus,
@@ -962,16 +1043,12 @@ class JarvisApp:
 
         self.orb = OverlayOrb(sm=self.sm, bus=self.bus, amplitude_latch=self.amplitude_latch)
 
+    def _build_research_panel(self) -> None:
         # Research panel + tool registration. Panel lives on the Qt thread;
         # the tools emit cross-thread Signals to drive it from the audio loop.
-        def _on_research_panel_width(width: int) -> None:
-            if self.cfg.ui.research_panel_width != width:
-                self.cfg.ui.research_panel_width = width
-                self._on_config_change()
-
         self.research_panel = ResearchPanel(
             panel_width=self.cfg.ui.research_panel_width,
-            on_width_changed=_on_research_panel_width,
+            on_width_changed=self._on_research_panel_width,
             ollama_model=self.cfg.llm.model,
         )
 
@@ -995,30 +1072,9 @@ class JarvisApp:
             copy_callback=self.research_panel.copy_summary,
         ))
 
-        def _deep_research_config_provider():
-            from jarvis.llm.ollama_client import DEFAULT_ENDPOINT
-            from jarvis.tools.local.deep_research_runner import build_deep_research_config
-
-            return build_deep_research_config(
-                research=self.cfg.research,
-                main_llm_model=self.cfg.llm.model,
-                ollama_endpoint=DEFAULT_ENDPOINT,
-            )
-
-        def _set_deep_research_ultra(enabled: bool) -> str:
-            from jarvis.core.config import save_config
-
-            self.cfg.research.ultra_enabled = enabled
-            save_config(self.cfg)
-            if enabled:
-                return (
-                    "Deep research Ultra is on, sir. "
-                    "Set JARVIS_BRAVE_API_KEY and JARVIS_GROQ_API_KEY for the full stack."
-                )
-            return "Deep research Ultra is off, sir. Using standard local deep research."
-
+    def _build_deep_research_panel(self) -> None:
         self.deep_research_panel = DeepResearchPanel(
-            config_provider=_deep_research_config_provider,
+            config_provider=self._deep_research_config_provider,
         )
 
         from jarvis.tools.local.deep_research_tools import (
@@ -1056,12 +1112,13 @@ class JarvisApp:
             delete_all=self.deep_research_panel.delete_all,
         ))
         self.registry.register(EnableDeepResearchUltraTool(
-            set_ultra=_set_deep_research_ultra,
+            set_ultra=self._set_deep_research_ultra,
         ))
         self.registry.register(DisableDeepResearchUltraTool(
-            set_ultra=_set_deep_research_ultra,
+            set_ultra=self._set_deep_research_ultra,
         ))
 
+    def _build_notes_panel(self) -> None:
         # --- Notes panel + voice tools ---------------------------------------
         self.notes_panel = NotesPanel()
 
@@ -1074,10 +1131,7 @@ class JarvisApp:
             TakeNoteTool,
         )
 
-        def _take_note(title: str, content: str) -> str:
-            return self.notes_panel.create_and_show(title, content)
-
-        self.registry.register(TakeNoteTool(on_create=_take_note))
+        self.registry.register(TakeNoteTool(on_create=self._take_note))
         self.registry.register(AppendToNoteTool(
             on_append_active=self.notes_panel.append_to_active,
             on_append_by_title=self.notes_panel.append_by_title,
@@ -1093,24 +1147,23 @@ class JarvisApp:
             on_delete_by_title=self.notes_panel.delete_by_title,
         ))
 
+    def _build_dashboard_panel(self) -> None:
         # --- Dashboard panel + voice tools -----------------------------------
+        # The two store listers are bound as attributes rather than imported
+        # inside _dr_counts / _notes_count so the import still happens here,
+        # while the UI is being built, exactly as it did in run().
         from jarvis.tools.local.deep_research_store import list_sessions as _list_dr
         from jarvis.tools.local.notes_store import list_notes as _list_notes
 
-        def _dr_counts() -> tuple[int, int]:
-            sessions = _list_dr()
-            paused = sum(1 for s in sessions if s.status == "paused")
-            return (len(sessions), paused)
-
-        def _notes_count() -> int:
-            return len(_list_notes())
+        self._list_dr = _list_dr
+        self._list_notes = _list_notes
 
         self.dashboard_panel = DashboardPanel(
             sm=self.sm,
             amplitude_latch=self.amplitude_latch,
             config_provider=lambda: self.cfg,
-            deep_research_count_provider=_dr_counts,
-            notes_count_provider=_notes_count,
+            deep_research_count_provider=self._dr_counts,
+            notes_count_provider=self._notes_count,
         )
 
         from jarvis.tools.local.dashboard_tools import (
@@ -1121,6 +1174,7 @@ class JarvisApp:
         self.registry.register(ShowDashboardTool(on_open=self.dashboard_panel.open_panel))
         self.registry.register(CloseDashboardTool(on_close=self.dashboard_panel.close_panel))
 
+    def _build_help_panel(self) -> None:
         # --- Help panel + voice tools ----------------------------------------
         self.help_panel = HelpPanel()
 
@@ -1128,6 +1182,7 @@ class JarvisApp:
 
         self.registry.register(OpenHelpTool(on_open=self.help_panel.open_panel))
 
+    def _build_clipboard_panel(self) -> None:
         # --- Clipboard history panel + voice tools ---------------------------
         self.clipboard_panel = ClipboardHistoryPanel()
 
@@ -1151,6 +1206,7 @@ class JarvisApp:
             on_clear=lambda: self.clipboard_panel.clear_all(keep_pinned=True),
         ))
 
+    def _build_log_panel(self) -> None:
         # --- Live log viewer panel + voice tools -----------------------------
         self.log_panel = LogPanel()
 
@@ -1159,43 +1215,24 @@ class JarvisApp:
         self.registry.register(ShowLogsTool(on_open=self.log_panel.open_panel))
         self.registry.register(CloseLogsTool(on_close=self.log_panel.close_panel))
 
+    def _build_command_palette(self) -> None:
         # --- Command palette -------------------------------------------------
         # Submission routes through the audio loop: we wrap the producer that
         # the AudioPipeline normally drives so palette entries fire the exact
         # same intent-router + tool pipeline as a real STT result, just without
         # the wake-word / VAD gating.
-        palette_producer = _make_router_adapter(self.router, self.conversation, self.registry)
+        self._palette_producer = _make_router_adapter(
+            self.router, self.conversation, self.registry
+        )
 
-        async def _consume_palette_text(text: str) -> None:
-            try:
-                async for _chunk in palette_producer(text):
-                    pass
-            except Exception:
-                log.exception("command palette text execution failed")
+        self.command_palette = CommandPalette(submit_text=self._submit_palette_text)
 
-        def _submit_palette_text(text: str) -> None:
-            try:
-                asyncio.run_coroutine_threadsafe(
-                    _consume_palette_text(text), self.audio_loop
-                )
-            except Exception:
-                log.exception("could not schedule palette text onto audio loop")
-
-        self.command_palette = CommandPalette(submit_text=_submit_palette_text)
-
+    def _build_onboarding_panel(self) -> None:
         # --- Onboarding panel (auto-shown on first run) ----------------------
-        def _on_onboarding_finished() -> None:
-            if not self.cfg.general.first_run_completed:
-                self.cfg.general.first_run_completed = True
-                try:
-                    self._on_config_change()
-                except Exception:
-                    log.exception("config persist failed after onboarding finish")
-
         self.onboarding_panel = OnboardingPanel(
             bus=self.bus,
             amplitude_latch=self.amplitude_latch,
-            on_finished=_on_onboarding_finished,
+            on_finished=self._on_onboarding_finished,
             on_open_help=self.help_panel.open_panel,
             on_open_command_palette=self.command_palette.open_palette,
         )
@@ -1204,6 +1241,7 @@ class JarvisApp:
             # Defer to next Qt tick so the rest of the UI exists first.
             QTimer.singleShot(800, self.onboarding_panel.open_panel)
 
+    def _build_hotkeys(self) -> None:
         self.hotkeys = HotkeyManager(
             sm=self.sm,
             bus=self.bus,
