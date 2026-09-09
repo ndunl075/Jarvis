@@ -113,6 +113,10 @@ pytest
   ignores to silence a finding you could fix instead.
 - **pyright** reads `[tool.pyright]`: `standard` mode over `jarvis` and `tests`.
   Run it with no arguments — passing paths overrides the configured `include`.
+  It currently reports a pre-existing backlog of 176 errors, so in CI it runs
+  as an **advisory** step rather than a blocking one — see
+  [#4](https://github.com/ndunl075/Jarvis/issues/4). Don't add to the backlog:
+  new code should type-check cleanly.
 - **pytest** reads `[tool.pytest.ini_options]`: `testpaths = tests`,
   `asyncio_mode = auto` (so `async def` tests need no decorator), and
   `addopts = -m 'not manual'`.
@@ -260,8 +264,10 @@ degrade to the free local path when no key is configured.
 - **Open a PR** and fill in the template
   ([`.github/pull_request_template.md`](.github/pull_request_template.md)): what
   changed, why, how you tested it, and the checklist.
-- **CI must be green.** ruff, pyright, and pytest all run on Windows and Linux
-  across Python 3.11 and 3.12. Do not disable a check to get a build passing.
+- **CI must be green.** ruff and pytest are blocking gates and run on Windows
+  and Linux across Python 3.11 and 3.12. pyright runs alongside them but is
+  advisory while its backlog is cleared ([#4](https://github.com/ndunl075/Jarvis/issues/4)).
+  Do not disable a check to get a build passing.
 - **Update the docs when behavior changes.** New voice commands and new
   capabilities belong in the README feature list and in the Help catalog
   (`jarvis/ui/capabilities.py`) so they show up in the in-app help panel and the

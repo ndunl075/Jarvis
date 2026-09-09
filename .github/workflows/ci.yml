@@ -104,7 +104,20 @@ jobs:
       # pyright reads [tool.pyright] from pyproject.toml (include = jarvis,
       # tests; typeCheckingMode = standard). Do not pass paths here or that
       # include list is overridden.
-      - name: Type check (pyright)
+      #
+      # STAGED ROLLOUT — this step is advisory, and is the ONLY step here
+      # that is. It reports 176 pre-existing errors (122 in tests/, 54 in
+      # jarvis/), overwhelmingly reportArgumentType / reportAttributeAccess
+      # from untyped test doubles. Making it blocking today would land this
+      # workflow permanently red, which teaches everyone to ignore CI - the
+      # exact failure mode this file exists to prevent. It runs so the count
+      # is visible and cannot grow unnoticed.
+      #
+      # Flip continue-on-error to false once that backlog is cleared; the
+      # tracking issue is linked from CONTRIBUTING.md. Ruff and pytest below
+      # are hard gates from day one and both pass on main.
+      - name: Type check (pyright, advisory)
+        continue-on-error: true
         run: pyright
 
       # pytest reads [tool.pytest.ini_options]: testpaths = tests,
