@@ -43,7 +43,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from jarvis.platform.secrets import decrypt_secret, encrypt_secret
 
-CURRENT_SCHEMA_VERSION = 21
+CURRENT_SCHEMA_VERSION = 22
 
 # Prompts from prior schema versions — used by migrations to detect and
 # replace the old default without overwriting user-customised prompts.
@@ -217,6 +217,17 @@ class LLMConfig(_Base):
     # 300 s — cross-task contamination risk returns. 60 s matches typical
     # conversational follow-up tempo without leaking prior task context.
     conversation_continuity_seconds: int = Field(default=60, gt=0)
+    # Maximum LLM invocations per user turn when the model calls tools.
+    # The router feeds each tool result back as a role:"tool" message and
+    # re-invokes the model so it can act on what it got back ("check the
+    # weather, and if it's cold open my coat app"). Every extra iteration
+    # is another full inference, so this is a latency budget rather than
+    # a capability ceiling: 3 covers the two-step requests people
+    # actually make while capping the worst case at three inferences on
+    # a local 7B. Set to 1 to disable the feedback loop and restore
+    # one-shot dispatch — the tool's own output is spoken verbatim,
+    # lowest latency, no follow-up reasoning.
+    max_tool_iterations: int = Field(default=3, ge=1, le=10)
 
 
 class ToolsConfig(_Base):
@@ -859,6 +870,23 @@ def _migrate_v17_to_v18(data: dict) -> dict:
     return data
 
 
+def _migrate_v21_to_v22(data: dict) -> dict:
+    """Schema v22: llm.max_tool_iterations for the tool-result feedback loop.
+
+    Existing configs get the shipping default (3), which switches the
+    loop on for them. That IS the intended upgrade: before it the model
+    never saw what a tool returned, so nothing needing two steps
+    ("list my Downloads and tell me which is the invoice") could work
+    at all. Users who prefer the previous one-shot behaviour — the
+    tool's own output spoken verbatim, exactly one inference per turn —
+    set it to 1.
+    """
+    llm = data.setdefault("llm", {})
+    llm.setdefault("max_tool_iterations", 3)
+    data["schema_version"] = 22
+    return data
+
+
 MIGRATIONS: dict[int, Migration] = {
     1: _migrate_v1_to_v2,
     2: _migrate_v2_to_v3,
@@ -880,6 +908,7 @@ MIGRATIONS: dict[int, Migration] = {
     18: _migrate_v18_to_v19,
     19: _migrate_v19_to_v20,
     20: _migrate_v20_to_v21,
+    21: _migrate_v21_to_v22,
 }
 
 
