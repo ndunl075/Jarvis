@@ -37,6 +37,22 @@ loses settings.
   `pygetwindow` / `pyrect` / `python3-Xlib` from source and fails on a bare CI
   runner. No behaviour change on Windows.
 
+### Security
+
+- Config secrets are encrypted at rest with Windows DPAPI (config schema
+  **v21**, migration `_migrate_v20_to_v21`). `research.brave_api_key`,
+  `research.groq_api_key`, and `mcp_servers[].auth_token` were previously
+  written to `%APPDATA%\Jarvis\config.json` in plaintext with default file
+  permissions; they are now stored as `dpapi:<base64>`, readable only by the
+  Windows user account that wrote them. Everything else in `config.json` stays
+  plain JSON you can hand-edit. Existing plaintext configs keep working and are
+  re-encrypted on the next save — nothing is stranded. Ciphertext this account
+  cannot decrypt (a config copied between machines or users) is reported as a
+  warning naming the setting and treated as empty rather than crashing startup.
+  On non-Windows hosts there is no DPAPI, so values fall back to plaintext with
+  one logged warning per process — a documented trade-off for contributor dev
+  machines, not a shipping configuration. New module: `jarvis/platform/secrets.py`.
+
 ## [0.0.1] - 2026-05-26
 
 First public release. Everything below runs on the user's own PC; the only
