@@ -25,6 +25,9 @@ Covered:
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
+from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -33,6 +36,7 @@ from jarvis.app import _AUDIO_SHUTDOWN_TIMEOUT, JarvisApp
 from jarvis.core.config import JarvisConfig
 from jarvis.core.events import ConfigChanged
 from jarvis.core.state_machine import Mode
+from tests._typing import as_mock
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -59,7 +63,11 @@ def _quittable_app(order: list[str] | None = None, *, with_panels: bool = True) 
     def rec(name):
         if order is None:
             return None
-        return lambda *a, **k: order.append(name)
+        # Bound to a local so the narrowing above survives into the
+        # closure; pyright re-widens a captured name back to its
+        # declared type inside a lambda.
+        sink = order
+        return lambda *a, **k: sink.append(name)
 
     app.confirmer = MagicMock()
     app.confirmer.close = MagicMock(side_effect=rec("confirmer_close"))
@@ -143,8 +151,8 @@ def test_on_quit_signals_stop_event_through_the_loop_not_directly():
 
     app._on_quit()
 
-    app.audio_loop.call_soon_threadsafe.assert_called_once_with(app.stop_event.set)
-    app.stop_event.set.assert_not_called()
+    as_mock(app.audio_loop.call_soon_threadsafe).assert_called_once_with(app.stop_event.set)
+    as_mock(app.stop_event.set).assert_not_called()
 
 
 def test_on_quit_joins_with_the_shutdown_timeout_before_quitting():
@@ -152,18 +160,18 @@ def test_on_quit_joins_with_the_shutdown_timeout_before_quitting():
 
     app._on_quit()
 
-    app.audio_thread.join.assert_called_once_with(timeout=_AUDIO_SHUTDOWN_TIMEOUT)
+    as_mock(app.audio_thread.join).assert_called_once_with(timeout=_AUDIO_SHUTDOWN_TIMEOUT)
     assert _AUDIO_SHUTDOWN_TIMEOUT == 10.0
 
 
 def test_on_quit_skips_the_join_when_the_thread_already_stopped():
     order: list[str] = []
     app = _quittable_app(order)
-    app.audio_thread.is_alive.return_value = False
+    as_mock(app.audio_thread.is_alive).return_value = False
 
     app._on_quit()
 
-    app.audio_thread.join.assert_not_called()
+    as_mock(app.audio_thread.join).assert_not_called()
     assert "thread_join" not in order
     assert order[-1] == "qt_quit"
 
@@ -172,7 +180,7 @@ def test_on_quit_survives_a_failing_tray_hide():
     """tray.hide() is best-effort; the audio stack must still be drained."""
     order: list[str] = []
     app = _quittable_app(order)
-    app.tray.hide.side_effect = RuntimeError("tray already gone")
+    as_mock(app.tray.hide).side_effect = RuntimeError("tray already gone")
 
     app._on_quit()
 
@@ -209,7 +217,7 @@ def test_on_quit_tolerates_a_confirmer_that_was_never_built():
 
     app._on_quit()
 
-    app.qt_app.quit.assert_called_once()
+    as_mock(app.qt_app.quit).assert_called_once()
 
 
 def test_on_quit_survives_a_failing_confirmer_close():
@@ -217,12 +225,12 @@ def test_on_quit_survives_a_failing_confirmer_close():
     with a live tray icon and no window."""
     order: list[str] = []
     app = _quittable_app(order)
-    app.confirmer.close = MagicMock(side_effect=RuntimeError("boom"))
+    as_mock(app.confirmer).close = MagicMock(side_effect=RuntimeError("boom"))
 
     app._on_quit()
 
     assert order[0] == "stop_event_signalled"
-    app.qt_app.quit.assert_called_once()
+    as_mock(app.qt_app.quit).assert_called_once()
 
 
 def test_build_confirmer_installs_it_on_the_registry():
@@ -283,7 +291,7 @@ def test_on_quit_tolerates_panels_that_were_never_built():
 
     app._on_quit()
 
-    app.qt_app.quit.assert_called_once()
+    as_mock(app.qt_app.quit).assert_called_once()
 
 
 def test_on_quit_tolerates_a_research_panel_that_was_never_built():
@@ -294,7 +302,7 @@ def test_on_quit_tolerates_a_research_panel_that_was_never_built():
 
     app._on_quit()
 
-    app.qt_app.quit.assert_called_once()
+    as_mock(app.qt_app.quit).assert_called_once()
 
 
 def test_on_quit_is_idempotent():
@@ -304,9 +312,9 @@ def test_on_quit_is_idempotent():
     app._on_quit()
     app._on_quit()
 
-    assert app.qt_app.quit.call_count == 1
-    assert app.audio_loop.call_soon_threadsafe.call_count == 1
-    assert app.audio_thread.join.call_count == 1
+    assert as_mock(app.qt_app.quit).call_count == 1
+    assert as_mock(app.audio_loop.call_soon_threadsafe).call_count == 1
+    assert as_mock(app.audio_thread.join).call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -328,8 +336,8 @@ def test_on_config_change_publishes_only_the_changed_fields():
 
     app._on_config_change()
 
-    app.bus.publish.assert_called_once()
-    event = app.bus.publish.call_args[0][0]
+    as_mock(app.bus.publish).assert_called_once()
+    event = as_mock(app.bus.publish).call_args[0][0]
     assert isinstance(event, ConfigChanged)
     assert event.changed_fields == ("tts.speed",)
     assert event.old.tts.speed != 1.4
@@ -341,7 +349,7 @@ def test_on_config_change_is_a_no_op_when_nothing_changed():
 
     app._on_config_change()
 
-    app.bus.publish.assert_not_called()
+    as_mock(app.bus.publish).assert_not_called()
 
 
 def test_on_config_change_advances_the_snapshot():
@@ -353,7 +361,7 @@ def test_on_config_change_advances_the_snapshot():
     app.cfg.tts.volume = 0.5
     app._on_config_change()
 
-    assert [c[0][0].changed_fields for c in app.bus.publish.call_args_list] == [
+    assert [c[0][0].changed_fields for c in as_mock(app.bus.publish).call_args_list] == [
         ("tts.speed",),
         ("tts.volume",),
     ]
@@ -386,7 +394,7 @@ def test_on_research_panel_width_persists_a_user_drag():
     app._on_research_panel_width(555)
 
     assert app.cfg.ui.research_panel_width == 555
-    assert app.bus.publish.call_args[0][0].changed_fields == ("ui.research_panel_width",)
+    assert as_mock(app.bus.publish).call_args[0][0].changed_fields == ("ui.research_panel_width",)
 
 
 def test_on_research_panel_width_ignores_a_drag_that_changed_nothing():
@@ -394,7 +402,7 @@ def test_on_research_panel_width_ignores_a_drag_that_changed_nothing():
 
     app._on_research_panel_width(app.cfg.ui.research_panel_width)
 
-    app.bus.publish.assert_not_called()
+    as_mock(app.bus.publish).assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -457,11 +465,11 @@ def test_tray_open_palette_reads_the_attribute_at_call_time():
 def test_open_settings_creates_once_and_raises_thereafter():
     app = JarvisApp()
     app.cfg = JarvisConfig()
-    app.voices_dir = None
+    app.voices_dir = Path("/voices")
 
     with patch("jarvis.app.SettingsWindow") as window_cls:
         app._open_settings()
-        first = app.settings_window
+        first = as_mock(app.settings_window)
         app._open_settings()
 
     assert window_cls.call_count == 1
@@ -474,7 +482,10 @@ def test_open_settings_creates_once_and_raises_thereafter():
 def test_open_settings_wires_the_window_to_this_apps_handlers():
     app = JarvisApp()
     app.cfg = JarvisConfig()
-    app.voices_dir = "/voices"
+    # A bare str, not a Path: _open_settings only forwards this value to
+    # the (patched) SettingsWindow, and the assertion below compares what
+    # arrived against the literal it was given.
+    app.voices_dir = "/voices"  # type: ignore[assignment]
 
     with patch("jarvis.app.SettingsWindow") as window_cls:
         app._open_settings()
@@ -562,8 +573,8 @@ async def test_consume_palette_text_drains_the_producer():
     app = JarvisApp()
     seen: list[str] = []
 
-    async def producer(text):
-        seen.append(text)
+    async def producer(transcription: str) -> AsyncIterator[str]:
+        seen.append(transcription)
         yield "one"
         yield "two"
 
@@ -576,7 +587,7 @@ async def test_consume_palette_text_drains_the_producer():
 async def test_consume_palette_text_swallows_a_producer_failure():
     app = JarvisApp()
 
-    async def producer(text):
+    async def producer(transcription: str) -> AsyncIterator[str]:
         raise RuntimeError("router exploded")
         yield  # pragma: no cover
 
@@ -596,16 +607,17 @@ def test_on_onboarding_finished_marks_first_run_complete_once():
     app._on_onboarding_finished()
 
     assert app.cfg.general.first_run_completed is True
-    assert app.bus.publish.call_args[0][0].changed_fields == ("general.first_run_completed",)
+    published = as_mock(app.bus.publish).call_args[0][0]
+    assert published.changed_fields == ("general.first_run_completed",)
 
     app._on_onboarding_finished()
-    assert app.bus.publish.call_count == 1
+    assert as_mock(app.bus.publish).call_count == 1
 
 
 def test_on_onboarding_finished_survives_a_failing_persist():
     app = _config_app()
     app.cfg.general.first_run_completed = False
-    app.bus.publish.side_effect = RuntimeError("bus is gone")
+    as_mock(app.bus.publish).side_effect = RuntimeError("bus is gone")
 
     app._on_onboarding_finished()  # must not propagate
 
@@ -629,10 +641,22 @@ def test_set_deep_research_ultra_saves_and_confirms():
 
 def test_dr_counts_and_notes_count_read_the_stores():
     app = JarvisApp()
-    app._list_dr = lambda: [
-        MagicMock(status="paused"), MagicMock(status="running"), MagicMock(status="paused"),
-    ]
-    app._list_notes = lambda: ["a", "b"]
+
+    # list[Any]: _dr_counts only reads .status and _notes_count only takes
+    # len(), so mocks stand in for the real DeepResearchState / Note the
+    # stores return, and a list of those is invariant.
+    def _sessions() -> list[Any]:
+        return [
+            MagicMock(status="paused"),
+            MagicMock(status="running"),
+            MagicMock(status="paused"),
+        ]
+
+    def _notes() -> list[Any]:
+        return ["a", "b"]
+
+    app._list_dr = _sessions
+    app._list_notes = _notes
 
     assert app._dr_counts() == (3, 2)
     assert app._notes_count() == 2
