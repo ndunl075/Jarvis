@@ -434,3 +434,55 @@ def test_about_tab_marks_unpulled_when_model_missing(qapp):
     probe = MagicMock(return_value=(True, ["something-else"]))
     tab = AboutTab(config=cfg, on_change=lambda: None, probe=probe)
     assert tab.model_status.text() == "Not pulled"
+
+
+# ---------------------------------------------------------------------------
+# Version reporting
+#
+# about.py used to hardcode JARVIS_VERSION = "0.1.0-dev" while pyproject.toml,
+# the README download link, CHANGELOG.md and SECURITY.md all said 0.0.1 -- so
+# the About tab showed users a version that existed nowhere else. It now reads
+# package metadata, but the shipped app falls back to a literal because
+# jarvis.spec does not bundle the dist-info. This pins that literal so it
+# cannot drift from pyproject the way the old constant did.
+# ---------------------------------------------------------------------------
+
+
+def _pyproject_version() -> str:
+    import tomllib
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    with (root / "pyproject.toml").open("rb") as fh:
+        return tomllib.load(fh)["project"]["version"]
+
+
+def test_about_fallback_version_matches_pyproject():
+    from jarvis.ui.settings.tabs.about import _FALLBACK_VERSION
+
+    assert _FALLBACK_VERSION == _pyproject_version(), (
+        "about.py's fallback version drifted from pyproject.toml; update the "
+        "literal in the same commit that bumps the project version"
+    )
+
+
+def test_detect_version_falls_back_when_metadata_is_absent(monkeypatch):
+    """The frozen build has no dist-info, so this path is what users see."""
+    import importlib.metadata as md
+
+    from jarvis.ui.settings.tabs import about
+
+    def _raise(_name):
+        raise md.PackageNotFoundError("jarvis")
+
+    monkeypatch.setattr(md, "version", _raise)
+    assert about._detect_version() == about._FALLBACK_VERSION
+
+
+def test_detect_version_prefers_installed_metadata(monkeypatch):
+    import importlib.metadata as md
+
+    from jarvis.ui.settings.tabs import about
+
+    monkeypatch.setattr(md, "version", lambda _name: "9.9.9")
+    assert about._detect_version() == "9.9.9"
