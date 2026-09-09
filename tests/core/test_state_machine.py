@@ -51,21 +51,30 @@ LEGAL_CS_PAIRS = {
     (ConversationalState.SPEAKING, ConversationalState.LISTENING),
 }
 
+# Sorted for a stable parametrize id order. Bound to a named, annotated
+# variable rather than inlined into the decorator: parametrize's argvalues
+# parameter is `Iterable[object]`, and inlining lets that expected type
+# flow back into the sort key, where `p[0].name` then has nothing to
+# resolve against.
+SORTED_MODE_PAIRS: list[tuple[Mode, Mode]] = sorted(
+    LEGAL_MODE_PAIRS, key=lambda p: (p[0].name, p[1].name)
+)
+SORTED_CS_PAIRS: list[tuple[ConversationalState, ConversationalState]] = sorted(
+    LEGAL_CS_PAIRS, key=lambda p: (p[0].name, p[1].name)
+)
+
 
 # --- legal transitions ----------------------------------------------------
 
 
-@pytest.mark.parametrize("old,new", sorted(LEGAL_MODE_PAIRS, key=lambda p: (p[0].name, p[1].name)))
+@pytest.mark.parametrize("old,new", SORTED_MODE_PAIRS)
 def test_every_legal_mode_transition_succeeds(old: Mode, new: Mode):
     sm = StateMachine(initial_mode=old)
     sm.set_mode(new)
     assert sm.mode is new
 
 
-@pytest.mark.parametrize(
-    "old,new",
-    sorted(LEGAL_CS_PAIRS, key=lambda p: (p[0].name, p[1].name)),
-)
+@pytest.mark.parametrize("old,new", SORTED_CS_PAIRS)
 def test_every_legal_cs_transition_succeeds(
     old: ConversationalState, new: ConversationalState
 ):

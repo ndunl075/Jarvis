@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -20,8 +21,12 @@ from jarvis.tools.local.deep_research_store import (
 )
 
 
-def _cfg(**overrides) -> DeepResearchConfig:
-    base = dict(
+def _cfg(**overrides: object) -> DeepResearchConfig:
+    # dict[str, Any] because these are keyword arguments of several
+    # types, splatted into a constructor that types each one exactly;
+    # without the annotation the inferred `dict[str, str | int]` is
+    # checked against every parameter and mismatches all of them.
+    base: dict[str, Any] = dict(
         planner_model="planner",
         worker_model="worker",
         depth=2,
