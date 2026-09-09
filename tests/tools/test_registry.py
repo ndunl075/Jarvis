@@ -87,11 +87,13 @@ def test_concrete_tools_satisfy_protocol():
     assert isinstance(_NoArgsTool(), Tool)
 
 
-def test_phase_4_tools_default_requires_confirmation_false():
-    """Per design note: requires_confirmation is in the protocol but is
-    not yet wired to any UX (deferred to Phase 6+). All Phase 4 tools
-    must ship with the flag False; this test guards the contract on the
-    in-tree fakes that stand in for them at this layer."""
+def test_ordinary_tools_do_not_ask_for_confirmation():
+    """The flag is opt-in, and the fakes here are the ordinary case.
+
+    Confirmation is wired now (see the registry header and
+    jarvis/ui/tool_confirm.py), so a tool that sets the flag gets a
+    modal dialog in front of it. The default has to stay False or every
+    "volume up" becomes a prompt."""
     assert _EchoTool().requires_confirmation is False
     assert _NoArgsTool().requires_confirmation is False
 

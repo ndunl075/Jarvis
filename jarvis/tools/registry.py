@@ -24,12 +24,33 @@ Design rationale (Phase 4 Task 1 design note, approved):
   it must drop the call cleanly rather than race-execute the disabled
   tool. Tested explicitly.
 
-- requires_confirmation is in the protocol but is NOT yet wired to any
-  UX. Deferred to Phase 6+ when hotkey-based cancellation lands: the
-  cancel-window approach needs barge-in (currently disabled by speaker
-  → mic feedback) and the voice-confirmation alternative has the same
-  STT-during-TTS issue. All Phase 4 tools ship with the flag False; no
-  destructive tools (files.delete, etc.) are included.
+- requires_confirmation IS wired, and execute() is where it is
+  enforced. Every tool call — pattern-routed, LLM-chosen via
+  IntentRouter._run_tools, or command-palette — funnels through
+  execute(), so gating it there gates all of them; there is no second
+  dispatch path a caller could reach around.
+
+  The UX is a modal Qt dialog (jarvis/ui/tool_confirm.py), NOT the
+  cancel-window or voice-confirmation designs this was originally
+  deferred for. Both of those needed the audio path: the cancel window
+  needs barge-in (still disabled by speaker → mic feedback) and voice
+  confirmation needs STT during TTS. A dialog on the Qt main thread
+  needs neither, so the blocker does not apply to it. The audio thread
+  awaits the verdict; the bridge is described in ui/tool_confirm.py.
+
+  The gate FAILS CLOSED. A registry built without a confirmer — every
+  headless test, and the window before the Qt UI exists — denies any
+  tool that asks for confirmation rather than running it unguarded. A
+  denial is a ToolResult(success=False, error=...) like every other
+  failure mode here, never an exception: the router speaks it back and
+  the model can read it and choose differently.
+
+  Tools opt in individually. Today that is type_into_active_window
+  (synthesises arbitrary keystrokes into whatever window has focus —
+  a terminal, an address bar, a password field) and any MCP tool whose
+  server config sets requires_confirmation. See the note on
+  lock_screen for a tool that was considered and deliberately left
+  ungated.
 
 - MCP tool name sanitisation lives in mcp_client.py (Task 3). The
   shared TOOL_NAME_REGEX below is the validity contract: lowercase
@@ -94,6 +115,70 @@ class Tool(Protocol):
     requires_confirmation: bool
 
     async def execute(self, args: BaseModel) -> ToolResult: ...
+
+
+# --- confirmation (the requires_confirmation gate) --------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ConfirmationRequest:
+    """What the user is being asked to approve.
+
+    A plain value object so the registry never imports Qt: the audio
+    thread builds one of these and hands it to whatever ToolConfirmer is
+    wired, which in the desktop app is jarvis.ui.tool_confirm. Tests wire
+    a two-line fake instead.
+
+    `summary` is the sentence the user reads. It comes from the tool's
+    optional confirmation_summary(args) hook, falling back to the tool
+    description — the description is written for the LLM, so a tool whose
+    risk depends on its arguments ("type <this> into <that>") should
+    implement the hook. `arguments` is shown verbatim underneath: the
+    summary says what kind of thing is about to happen, the arguments say
+    exactly what."""
+
+    tool_name: str
+    summary: str
+    arguments: dict
+
+
+@runtime_checkable
+class ToolConfirmer(Protocol):
+    """Asks the user to approve one tool call and returns their verdict.
+
+    Awaited on the audio loop, so an implementation that has to reach
+    another thread must do so without blocking this one. Contract:
+
+      - returns True only on an explicit approval; anything else —
+        denial, timeout, dismissal, a wedged UI — is False,
+      - never raises for a routine outcome (the registry treats a raise
+        as a denial anyway), and
+      - propagates CancelledError, so a cancelled interaction unwinds
+        instead of stalling behind a prompt nobody is looking at."""
+
+    async def confirm(self, request: ConfirmationRequest) -> bool: ...
+
+
+def _confirmation_summary(tool: Tool, args: BaseModel) -> str:
+    """The sentence shown to the user for `tool`.
+
+    The optional confirmation_summary(args) hook wins; a tool that does
+    not define one (every MCP tool, by construction) falls back to its
+    description. A hook that raises is not allowed to take the gate down
+    with it — the fallback is used and the prompt still appears."""
+    build = getattr(tool, "confirmation_summary", None)
+    if callable(build):
+        try:
+            text = build(args)
+        except Exception:
+            log.exception(
+                "confirmation_summary raised for %r; using description",
+                getattr(tool, "name", "<unnamed>"),
+            )
+        else:
+            if isinstance(text, str) and text.strip():
+                return text.strip()
+    return tool.description
 
 
 # --- voice patterns (optional tool capability) ------------------------
@@ -187,9 +272,15 @@ class ToolRegistry:
     """Flat namespace of registered tools. Constructed with a ToolsConfig
     so it can consult the enable/disable map fresh on every call."""
 
-    def __init__(self, tools_config: ToolsConfig) -> None:
+    def __init__(
+        self,
+        tools_config: ToolsConfig,
+        *,
+        confirmer: ToolConfirmer | None = None,
+    ) -> None:
         self._tools_config = tools_config
         self._tools: dict[str, Tool] = {}
+        self._confirmer = confirmer
 
     # -- registration -------------------------------------------------
 
@@ -209,6 +300,67 @@ class ToolRegistry:
 
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
+
+    # -- confirmation -------------------------------------------------
+
+    @property
+    def confirmer(self) -> ToolConfirmer | None:
+        return self._confirmer
+
+    def set_confirmer(self, confirmer: ToolConfirmer | None) -> None:
+        """Install (or clear) the approval UI.
+
+        A setter and not a constructor-only argument because of the build
+        order in jarvis/app.py: the registry is part of the audio stack,
+        which is composed before the QApplication the dialog needs
+        exists. The composition root installs the confirmer as soon as
+        Qt is up and before the audio thread starts, so the fail-closed
+        window is never one a spoken command can land in."""
+        self._confirmer = confirmer
+
+    async def _confirm(self, name: str, tool: Tool, args: BaseModel) -> str | None:
+        """Ask the user to approve `name`.
+
+        Returns None on approval, or the reason for the refusal — which
+        is what the caller puts in the ToolResult, so "nothing asked you"
+        and "you said no" read differently in the log and in the model's
+        tool result.
+
+        Fails closed on every path. No confirmer wired, a confirmer that
+        raises, a confirmer that returns something other than True — all
+        deny. The one thing that does not deny is CancelledError, which
+        belongs to the caller."""
+        confirmer = self._confirmer
+        if confirmer is None:
+            log.warning(
+                "tool %r requires confirmation but no confirmer is wired; "
+                "refusing", name,
+            )
+            return "no confirmation prompt is available"
+        try:
+            arguments = args.model_dump(mode="json")
+        except Exception:
+            # A tool whose args model will not serialise still gets a
+            # prompt — just without the argument detail. Denying here
+            # would be fail-closed but would also make the tool
+            # permanently unusable for a purely cosmetic reason.
+            log.debug("could not serialise args for %r", name, exc_info=True)
+            arguments = {}
+        request = ConfirmationRequest(
+            tool_name=name,
+            summary=_confirmation_summary(tool, args),
+            arguments=arguments,
+        )
+        try:
+            approved = await confirmer.confirm(request)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("confirmer raised for %r; treating as denied", name)
+            return "the confirmation prompt failed"
+        if approved is True:
+            return None
+        return "it was not approved"
 
     # -- visibility ---------------------------------------------------
 
@@ -249,9 +401,14 @@ class ToolRegistry:
         Re-checks list_enabled at call time, not at as_openai_functions
         time, so a config edit between LLM tool-choice and dispatch
         reliably drops the call rather than racing it through. All error
-        modes — unknown, disabled, invalid args, tool crash — return
-        ToolResult(success=False, error=...) so the SpeakIntent layer
-        has a single shape to format."""
+        modes — unknown, disabled, invalid args, tool crash, refused at
+        the confirmation prompt — return ToolResult(success=False,
+        error=...) so the SpeakIntent layer has a single shape to format.
+
+        The confirmation gate sits after validation and before dispatch:
+        after, so a malformed call is rejected without interrupting the
+        user for a tool that could never have run; before, so approval is
+        a precondition of the tool executing at all."""
         tool = self._tools.get(name)
         if tool is None:
             return ToolResult(success=False, error=f"unknown tool {name!r}")
@@ -265,6 +422,20 @@ class ToolRegistry:
                 error=f"invalid args for {name!r}: "
                       f"{e.errors(include_url=False)}",
             )
+        # getattr, not attribute access: `requires_confirmation` is part
+        # of the Tool protocol, but a duck-typed object that omits it
+        # would otherwise crash the dispatch path rather than be gated.
+        # Absent means "did not ask to be gated", which is the same
+        # answer as False and keeps every ungated tool on its old path —
+        # no confirmer consulted, no work done, no added latency.
+        if getattr(tool, "requires_confirmation", False):
+            refusal = await self._confirm(name, tool, args)
+            if refusal is not None:
+                log.info("tool %r did not run: %s", name, refusal)
+                return ToolResult(
+                    success=False,
+                    error=f"tool {name!r} did not run: {refusal}",
+                )
         try:
             return await tool.execute(args)
         except asyncio.CancelledError:
