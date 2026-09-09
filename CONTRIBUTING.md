@@ -99,8 +99,14 @@ python -m jarvis.dev.audio_loopback
 
 Run all three before opening a pull request. CI
 ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs exactly these
-commands on Windows and Linux, on Python 3.11 and 3.12, and every one of them is
-a blocking gate.
+commands. Ruff and pytest are blocking gates; pyright is advisory for now (see
+above).
+
+The matrix is Windows on Python 3.11 and 3.12, and **Linux on 3.11 only**.
+Linux is capped at 3.11 because `openwakeword` requires
+`tflite-runtime; platform_system == "Linux"`, and `tflite-runtime` publishes no
+cp312 wheels — so the package cannot be installed at all on Linux under 3.12.
+Windows is unaffected by that marker, so develop on Linux with **Python 3.11**.
 
 ```powershell
 ruff check jarvis tests
@@ -264,9 +270,10 @@ degrade to the free local path when no key is configured.
 - **Open a PR** and fill in the template
   ([`.github/pull_request_template.md`](.github/pull_request_template.md)): what
   changed, why, how you tested it, and the checklist.
-- **CI must be green.** ruff and pytest are blocking gates and run on Windows
-  and Linux across Python 3.11 and 3.12. pyright runs alongside them but is
-  advisory while its backlog is cleared ([#4](https://github.com/ndunl075/Jarvis/issues/4)).
+- **CI must be green.** ruff and pytest are blocking gates, on Windows
+  (3.11 and 3.12) and Linux (3.11 only — see the note above on
+  `tflite-runtime`). pyright runs alongside them but is advisory while its
+  backlog is cleared ([#4](https://github.com/ndunl075/Jarvis/issues/4)).
   Do not disable a check to get a build passing.
 - **Update the docs when behavior changes.** New voice commands and new
   capabilities belong in the README feature list and in the Help catalog
