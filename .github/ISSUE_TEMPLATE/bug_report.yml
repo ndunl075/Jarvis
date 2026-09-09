@@ -1,0 +1,177 @@
+name: Bug report
+description: Something in Jarvis does not work the way it should.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. The two fields that matter most for
+        debugging are **the log excerpt** and **the Ollama model in use** —
+        most reports that stall are missing one of them.
+
+        **Do not report a security vulnerability here.** Public issues tell
+        everyone about the flaw before a fix exists — see
+        [SECURITY.md](https://github.com/ndunl075/Jarvis/blob/main/SECURITY.md).
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: This is not a security vulnerability (those go through SECURITY.md).
+          required: true
+        - label: Ollama is installed, running, and the configured model is pulled.
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Jarvis version
+      description: Settings → About, or the filename of the zip you downloaded.
+      placeholder: "0.0.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-type
+    attributes:
+      label: How are you running Jarvis?
+      description: >-
+        The packaged build bundles the Whisper, Piper, and wake-word models and
+        writes to a log file; running from source uses your own venv and logs to
+        the console. Bugs often only reproduce in one of the two.
+      options:
+        - Packaged Windows zip build (Jarvis.exe)
+        - From source (python -m jarvis)
+    validations:
+      required: true
+
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+      description: Press Win+R, run `winver`, and paste the version and build.
+      placeholder: "Windows 11 23H2 (build 22631.4317)"
+    validations:
+      required: true
+
+  - type: input
+    id: ollama-version
+    attributes:
+      label: Ollama version
+      description: Output of `ollama --version`.
+      placeholder: "ollama version is 0.5.4"
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Ollama model in use
+      description: >-
+        Settings → Models, or `ollama list`. Include the deep-research planner
+        and worker models, or the vision model, if the bug involves them.
+      placeholder: "qwen2.5:7b-instruct (vision: llava:7b)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: Which part of Jarvis?
+      description: Your best guess is fine — it just routes the issue faster.
+      options:
+        - Wake word ("Hey Jarvis" not triggering, or firing on its own)
+        - Speech-to-text (wrong or missing transcription)
+        - Text-to-speech (no voice, wrong voice, cut-off audio, barge-in)
+        - LLM / Ollama (no reply, wrong reply, timeouts, model not loading)
+        - Intent routing (the wrong command ran, or none did)
+        - A specific tool (name it in the next field)
+        - Research or deep research
+        - Notes
+        - Clipboard or clipboard history
+        - UI (tray, overlay orb, settings, panels, command palette)
+        - Hotkeys
+        - Install, packaging, or first run
+        - Something else / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: tool-name
+    attributes:
+      label: Which tool? (if you picked "a specific tool")
+      placeholder: "open_app, see_screen, launch_workspace, weather, …"
+    validations:
+      required: false
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you say or click, and what did Jarvis actually do?
+      placeholder: >-
+        I said "Hey Jarvis, open Spotify". The orb pulsed, then nothing
+        happened and Jarvis said "I couldn't do that, sir."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: >-
+        Numbered steps, starting from a fresh launch. If it is intermittent,
+        say roughly how often it happens.
+      placeholder: |
+        1. Launch Jarvis.exe
+        2. Say "Hey Jarvis"
+        3. Say "open Spotify"
+        4. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log excerpt
+      description: >-
+        Packaged build: open %APPDATA%\Jarvis\logs\jarvis.log, or use the
+        in-app log viewer ("show logs" / tray → Show logs → OPEN FILE).
+        Running from source: paste the console output. Paste the lines around
+        the failure — the whole file is rarely needed, and please redact any
+        API keys or personal paths. Every interaction carries a correlation ID,
+        so including a few lines before and after the failure helps a lot.
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware (optional)
+      description: Helpful for performance and audio bugs.
+      placeholder: "Ryzen 5600X, 32 GB RAM, RTX 3060 12 GB, USB headset mic"
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: >-
+        Screenshots, whether Deep Research Ultra mode was on, which external MCP
+        servers you have configured, non-default settings, or anything else you
+        think matters.
+    validations:
+      required: false

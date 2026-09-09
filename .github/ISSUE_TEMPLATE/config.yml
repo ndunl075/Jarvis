@@ -1,0 +1,16 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or general discussion
+    url: https://github.com/ndunl075/Jarvis/discussions
+    about: >-
+      "How do I…", setup help, model recommendations, hardware questions, and
+      ideas that are not yet a concrete feature request. Please ask here rather
+      than opening an issue.
+  - name: Report a security vulnerability
+    url: https://github.com/ndunl075/Jarvis/security
+    about: >-
+      Report privately through the Security tab — never as a public issue. See
+      SECURITY.md for scope and what to include.
+  - name: Contributing guide
+    url: https://github.com/ndunl075/Jarvis/blob/main/CONTRIBUTING.md
+    about: Dev environment setup, how to run the tests, and the conventions the code follows.

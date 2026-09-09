@@ -1,0 +1,111 @@
+name: Feature request
+description: Suggest a new capability or an improvement to an existing one.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Jarvis is deliberately **fully local, no subscription, no telemetry**.
+        Proposals that keep the default path free of cloud services and API keys
+        have a much easier time landing. Features that need a third-party
+        service are still possible, but they have to be opt-in and degrade
+        cleanly when the user has not configured a key — the way Deep Research
+        Ultra mode does.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched existing issues and discussions for this idea.
+          required: true
+        - label: >-
+            I checked that Jarvis cannot already do this — the README feature
+            list, or the in-app help panel ("what can you do").
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - A new tool or voice command
+        - Voice pipeline (wake word, STT, TTS)
+        - LLM behaviour, persona, or intent routing
+        - Research or deep research
+        - Notes
+        - Clipboard
+        - UI (tray, overlay orb, settings, panels, command palette)
+        - Hotkeys
+        - Packaging, install, or updates
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: >-
+        Describe the situation you are actually in, not the solution. What do
+        you do today, and why is it worse than it should be?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like Jarvis to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: phrases
+    attributes:
+      label: How would you say it out loud?
+      description: >-
+        Jarvis is voice-first, so the trigger phrases are part of the design.
+        Give two or three ways you would naturally ask for this, and what you
+        would expect Jarvis to say back.
+      placeholder: |
+        "Hey Jarvis, set a timer for ten minutes"
+        "start a five minute timer"
+        → "Ten minute timer started, sir."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: network
+    attributes:
+      label: Does this need anything beyond the local machine?
+      description: >-
+        Anything that leaves the PC has to be documented in the README's
+        Security & privacy model table and has to be opt-in.
+      options:
+        - "No — fully local"
+        - "Yes, a free public API with no key"
+        - "Yes, a third-party service that needs an API key"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: >-
+        Other ways to solve the same problem, including doing nothing, and why
+        you think this one is better.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contribution
+      options:
+        - label: >-
+            I would be willing to open a pull request for this (see
+            CONTRIBUTING.md).
+          required: false
