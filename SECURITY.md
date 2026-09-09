@@ -154,7 +154,17 @@ to someone else:
   claims against the linked sources.
 - Keep Jarvis in a context where the worst case of a wrong tool call (a tab
   opening, an app starting) is acceptable.
-- API keys live in plaintext in `%APPDATA%\Jarvis\config.json`. Prefer the
-  environment variables if that matters to you; Jarvis never writes an
+- API keys and MCP auth tokens in `%APPDATA%\Jarvis\config.json` are encrypted
+  with Windows DPAPI and stored as `dpapi:<base64>`. DPAPI binds them to your
+  Windows *user account*, so another account on the same PC cannot read them —
+  but anything running as you still can, because it can simply ask DPAPI. Prefer
+  the environment variables if that matters to you; Jarvis never writes an
   environment-supplied key to disk. Revoking a key in the provider's dashboard is
   sufficient — nothing is cached anywhere else.
+- A `config.json` copied to another machine or another Windows account keeps its
+  non-secret settings but the encrypted keys cannot be decrypted there. Jarvis
+  logs a warning naming each setting and treats it as empty; re-enter the key in
+  Settings.
+- Non-Windows hosts have no DPAPI, so keys are stored in plaintext with one
+  logged warning per process. Jarvis ships for Windows; this is the documented
+  contributor-dev-machine fallback, not a supported deployment.

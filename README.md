@@ -330,7 +330,7 @@ Jarvis is designed to run locally; understand the boundaries before you trust it
 
 - Wake word, VAD, STT (Whisper), TTS (Piper), and the main LLM (Ollama) all run on your PC. Voice audio is never sent to a third party.
 - Notes (`%APPDATA%\Jarvis\notes\`), deep-research reports (`%APPDATA%\Jarvis\deep_research\`), screenshots (`~\Pictures\Jarvis_Screenshots\`), and logs (`%APPDATA%\Jarvis\logs\`) are local-only.
-- Configuration including any API keys you enter lives in `%APPDATA%\Jarvis\config.json` on your machine. The key fields are masked in the Settings UI.
+- Configuration lives in `%APPDATA%\Jarvis\config.json` on your machine. Any API keys and MCP auth tokens you enter are encrypted there with Windows DPAPI, so they are readable only by your Windows user account; the fields are masked in the Settings UI too. The rest of the file stays plain JSON you can hand-edit.
 
 ### What leaves your PC (and only when you opt in)
 
@@ -355,6 +355,8 @@ The voice-control tools (`open_app`, `open_url`, `launch_steam_game`, etc.) can 
 ### API keys
 
 - Resolution order: environment variable first (`JARVIS_BRAVE_API_KEY`, `JARVIS_GROQ_API_KEY`), then the value in `config.json`, then empty (graceful fallback to the free pipeline). Env vars never get written to disk by Jarvis.
+- Keys stored in `config.json` are encrypted at rest with Windows DPAPI and appear as `"dpapi:<base64>"`. DPAPI ties the ciphertext to your Windows user account, so copying `config.json` to another machine or another account leaves the keys unreadable: Jarvis logs a warning, treats them as empty, and you re-enter them in Settings. Everything else in the file is untouched.
+- On non-Windows hosts (contributor dev machines — Jarvis ships for Windows) there is no DPAPI, so keys fall back to plaintext with a startup warning. Prefer env vars there.
 - Keys are sent only over HTTPS to the named providers. They are never logged or printed.
 - Revoking a key in your provider dashboard is sufficient; nothing in Jarvis caches it server-side.
 
