@@ -47,6 +47,7 @@ import sys
 import threading
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import cast
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
@@ -564,8 +565,8 @@ class JarvisApp:
         # Panels that _on_quit and the tray handlers must tolerate being
         # absent: these were the `[None]` cells run() carried for exactly
         # the same reason, and they are read before _build_ui has run.
-        # (_on_config_change reads research_panel that way; _on_quit does
-        # not, which is run()'s asymmetry, kept.)
+        # The tray is built (and shown, with a live Quit action) before
+        # any of them, so every read of one has to be None-guarded.
         self.research_panel: ResearchPanel | None = None
         self.deep_research_panel: DeepResearchPanel | None = None
         self.notes_panel: NotesPanel | None = None
@@ -773,7 +774,17 @@ class JarvisApp:
         )
 
     def _create_qt_app(self) -> None:
-        self.qt_app = QApplication.instance() or QApplication(sys.argv)
+        # QApplication.instance() is declared as returning the base
+        # QCoreApplication singleton, because a Qt process may legally be
+        # running a non-GUI application. This one cannot: the only
+        # instance that ever exists in a Jarvis process is the
+        # QApplication created on the right of the `or` (or, under
+        # pytest-qt, the one the fixture created the same way). Cast at
+        # that boundary rather than re-checking a condition that the
+        # process start-up already guarantees.
+        self.qt_app = cast(
+            QApplication, QApplication.instance() or QApplication(sys.argv)
+        )
 
     def _build_confirmer(self) -> None:
         """Step 9b: install the approval UI for confirmable tools.
@@ -948,7 +959,8 @@ class JarvisApp:
         self.tray.close()
         self.orb.close()
         self.hotkeys.close()
-        self.research_panel.close_panel()
+        if self.research_panel is not None:
+            self.research_panel.close_panel()
         if self.deep_research_panel is not None:
             self.deep_research_panel.close_panel()
         if self.notes_panel is not None:
@@ -1015,6 +1027,9 @@ class JarvisApp:
         return "Deep research Ultra is off, sir. Using standard local deep research."
 
     def _take_note(self, title: str, content: str) -> str:
+        # Only reachable through TakeNoteTool, which _build_notes_panel
+        # registers after assigning self.notes_panel.
+        assert self.notes_panel is not None, "notes panel not built"
         return self.notes_panel.create_and_show(title, content)
 
     def _dr_counts(self) -> tuple[int, int]:
@@ -1237,7 +1252,11 @@ class JarvisApp:
 
     def _build_clipboard_panel(self) -> None:
         # --- Clipboard history panel + voice tools ---------------------------
-        self.clipboard_panel = ClipboardHistoryPanel()
+        # Bound through a local as well as the attribute: the ClearClipboard
+        # callback below is a lambda, so it would otherwise re-read the
+        # optional attribute on every invocation.
+        panel = ClipboardHistoryPanel()
+        self.clipboard_panel = panel
 
         from jarvis.tools.local.clipboard_history_tools import (
             ClearClipboardHistoryTool,
@@ -1256,7 +1275,7 @@ class JarvisApp:
             on_paste=self.clipboard_panel.paste_index,
         ))
         self.registry.register(ClearClipboardHistoryTool(
-            on_clear=lambda: self.clipboard_panel.clear_all(keep_pinned=True),
+            on_clear=lambda: panel.clear_all(keep_pinned=True),
         ))
 
     def _build_log_panel(self) -> None:
@@ -1282,6 +1301,10 @@ class JarvisApp:
 
     def _build_onboarding_panel(self) -> None:
         # --- Onboarding panel (auto-shown on first run) ----------------------
+        # _build_ui builds the help panel and the command palette first;
+        # the onboarding panel links to both. See its docstring.
+        assert self.help_panel is not None, "help panel not built"
+        assert self.command_palette is not None, "command palette not built"
         self.onboarding_panel = OnboardingPanel(
             bus=self.bus,
             amplitude_latch=self.amplitude_latch,
@@ -1295,6 +1318,9 @@ class JarvisApp:
             QTimer.singleShot(800, self.onboarding_panel.open_panel)
 
     def _build_hotkeys(self) -> None:
+        # Last in _build_ui, so the palette the hotkey opens already exists.
+        palette = self.command_palette
+        assert palette is not None, "command palette not built"
         self.hotkeys = HotkeyManager(
             sm=self.sm,
             bus=self.bus,
@@ -1303,7 +1329,7 @@ class JarvisApp:
             on_mode_request=self._request_mode,
             on_open_settings=self._open_settings_any_thread,
             on_open_command_palette=lambda: QTimer.singleShot(
-                0, self.command_palette.open_palette
+                0, palette.open_palette
             ),
         )
         self.hotkeys.register_all()

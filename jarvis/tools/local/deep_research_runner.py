@@ -36,7 +36,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from urllib.parse import urlparse
 
 from jarvis.tools.local.deep_research_store import (
@@ -54,6 +54,11 @@ from jarvis.tools.local.research_search import SearchProvider, fetch_search_snip
 from jarvis.tools.local.web_page_fetch import fetch_page_text
 
 log = logging.getLogger(__name__)
+
+# A search hit once it has been registered against state.citations. Same
+# shape as the raw ``dict[str, str]`` snippet plus a 1-based ``index``,
+# which is an int — hence the widened value type.
+CitedSource = dict[str, str | int]
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +103,9 @@ class DeepResearchConfig:
         self.gap_fill_max_iterations = max(1, gap_fill_max_iterations)
         self.ollama_endpoint = ollama_endpoint
         self.ultra = ultra
-        self.search_provider = search_provider
+        # Annotated: an unannotated attribute assignment widens the Literal
+        # to plain `str`, which fetch_search_snippets then refuses.
+        self.search_provider: SearchProvider = search_provider
         self.brave_api_key = brave_api_key
         self.groq_api_key = groq_api_key
         self.use_jina_reader = use_jina_reader
@@ -275,7 +282,7 @@ def synthesize_executive_overview(
 
 def extract_claims(
     sub_question: str,
-    sources: list[dict[str, str]],
+    sources: Sequence[Mapping[str, object]],
     *,
     cfg: DeepResearchConfig,
 ) -> tuple[list[CitedClaim], str]:
@@ -437,11 +444,11 @@ def _gather_sources_for_sub_question(
 def _register_sources(
     state: DeepResearchState,
     new_sources: list[dict[str, str]],
-) -> list[dict[str, str]]:
+) -> list[CitedSource]:
     """Add new sources to state.citations (deduped by URL); return a list
     enriched with the 1-based citation index for each."""
     index_by_url = {src["url"]: i + 1 for i, src in enumerate(state.citations)}
-    enriched: list[dict[str, str]] = []
+    enriched: list[CitedSource] = []
     for s in new_sources:
         url = s.get("url", "")
         if not url:
@@ -618,7 +625,12 @@ def run_deep_research(
                 summary=summary,
                 key_points=[c.text for c in claims],
                 cited_claims=claims,
-                sources=[{"title": s["title"], "url": s["url"]} for s in enriched],
+                # str(): the enriched dicts also carry the int citation
+                # index, so their value type is wider than the str-only
+                # shape DeepResearchSection.sources stores.
+                sources=[
+                    {"title": str(s["title"]), "url": str(s["url"])} for s in enriched
+                ],
                 queries_used=queries_used,
             )
             state.sections.append(section)
