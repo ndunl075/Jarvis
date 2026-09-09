@@ -29,9 +29,17 @@ from PySide6.QtWidgets import (
 )
 
 from jarvis.core.config import JarvisConfig, MCPServerConfig, save_config
+from jarvis.tools.catalogue import local_tool_names
 
 log = logging.getLogger(__name__)
 
+# The two research group boxes below carry their own explanatory copy, so
+# which tools belong in them is a LAYOUT decision and stays written down
+# here. Everything else is derived, so a new tool gets its checkbox from
+# jarvis.tools.catalogue rather than from someone remembering to edit a
+# list in the settings UI — that list had drifted from the tool set
+# before, which is the whole reason this file is being touched.
+# tests/ui/test_settings.py asserts both directions of the split.
 _RESEARCH_TOOL_NAMES: tuple[str, ...] = (
     "research",
     "close_research",
@@ -50,37 +58,13 @@ _DEEP_RESEARCH_TOOL_NAMES: tuple[str, ...] = (
     "disable_deep_research_ultra",
 )
 
-_LOCAL_TOOL_NAMES: tuple[str, ...] = (
-    "append_to_note",
-    "clear_clipboard_history",
-    "clipboard",
-    "close_app",
-    "close_clipboard_history",
-    "close_dashboard",
-    "close_logs",
-    "close_notes",
-    "delete_note",
-    "get_weather",
-    "launch_steam_game",
-    "launch_workspace",
-    "list_directory",
-    "lock_screen",
-    "open_app",
-    "open_help",
-    "open_notes",
-    "open_url",
-    "paste_clipboard_item",
-    "play_youtube_music",
-    "read_note",
-    "report_cpu_and_memory_percentages",
-    "screenshot",
-    "see_screen",
-    "show_clipboard_history",
-    "show_dashboard",
-    "show_logs",
-    "take_note",
-    "type_into_active_window",
-    "volume",
+# Every built-in tool that isn't already shown in a research group box.
+# Sorted (local_tool_names() sorts) because this renders as a flat
+# alphabetical checkbox list the user scans by name.
+_LOCAL_TOOL_NAMES: tuple[str, ...] = tuple(
+    name
+    for name in local_tool_names()
+    if name not in set(_RESEARCH_TOOL_NAMES) | set(_DEEP_RESEARCH_TOOL_NAMES)
 )
 
 

@@ -41,6 +41,21 @@ loses settings.
 
 ### Changed
 
+- Voice patterns now live on the tool they dispatch to. The router's
+  first-match-wins table was a 51-entry literal in `intent_router.py`, hundreds
+  of lines away from the tools it routed to; each tool declares its own
+  `voice_patterns` and the table is assembled from them. Order — which for a
+  first-match-wins table *is* behaviour — comes from an explicit integer
+  priority on each pattern, never from declaration or registration order. No
+  routing change: a golden captured before the refactor pins both the assembled
+  pattern order and the resolved intent for 187 utterances, and both are
+  unchanged.
+- Adding a local tool now touches 4 files instead of 6. The router's pattern
+  table and the Settings → Tools checkbox list are both derived from
+  `jarvis/tools/catalogue.py`, so neither can silently omit a tool. The Help
+  catalogue stays hand-written — a capability is a user task and several map to
+  more than one tool, or to none — but each entry now names the tools it
+  documents, and the link is checked against the catalogue in both directions.
 - Snap commands are unaffected by the feedback loop: "open spotify", "volume
   up", "research X" and every other pattern-matched phrase still bypass the LLM
   entirely. Only tools the model chooses go through the loop, and those now
