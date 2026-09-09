@@ -421,12 +421,19 @@ class _MCPEditDialog(QDialog):
         self.token_from_file.setChecked(
             existing.auth_token_from_file if existing else True
         )
+        self.requires_confirmation = QCheckBox(
+            "Ask me before running this server's tools"
+        )
+        self.requires_confirmation.setChecked(
+            existing.requires_confirmation if existing else False
+        )
 
         form = QFormLayout()
         form.addRow("Name:", self.name)
         form.addRow("URL:", self.url)
         form.addRow(self.enabled)
         form.addRow(self.token_from_file)
+        form.addRow(self.requires_confirmation)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok
@@ -455,6 +462,7 @@ class _MCPEditDialog(QDialog):
                 url=self.url.text().strip(),
                 enabled=self.enabled.isChecked(),
                 auth_token_from_file=self.token_from_file.isChecked(),
+                requires_confirmation=self.requires_confirmation.isChecked(),
                 auth_token=(
                     self._existing.auth_token
                     if self._existing is not None

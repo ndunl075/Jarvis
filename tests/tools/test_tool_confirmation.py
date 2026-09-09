@@ -391,3 +391,32 @@ async def test_a_summary_hook_that_raises_still_prompts():
 
     assert result.success is True
     assert confirmer.requests[0].summary == tool.description
+
+
+# --- MCP tools ----------------------------------------------------------
+
+
+def test_mcp_tools_carry_their_servers_confirmation_setting():
+    """Per server, not per tool: a remote server defines its own tool
+    list and can change it between connections, so the unit of trust is
+    the server the user chose to add."""
+    from jarvis.tools.mcp_client import MCPServerConnection, MCPTool
+
+    conn = MCPServerConnection("srv", "http://x/mcp", None)
+    gated = MCPTool(
+        name="srv_write_file",
+        description="writes",
+        args_schema=EmptyArgs,
+        connection=conn,
+        remote_name="write_file",
+        requires_confirmation=True,
+    )
+    ungated = MCPTool(
+        name="srv_read_file",
+        description="reads",
+        args_schema=EmptyArgs,
+        connection=conn,
+        remote_name="read_file",
+    )
+    assert gated.requires_confirmation is True
+    assert ungated.requires_confirmation is False
