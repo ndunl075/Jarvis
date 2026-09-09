@@ -305,6 +305,17 @@ def test_on_quit_tolerates_a_research_panel_that_was_never_built():
     as_mock(app.qt_app.quit).assert_called_once()
 
 
+def test_on_quit_tolerates_a_research_panel_that_was_never_built():
+    """_build_ui shows the tray — Quit action live — before it builds the
+    research panel, so _on_quit has to guard it like every sibling."""
+    app = _quittable_app(with_panels=False)
+    app.research_panel = None
+
+    app._on_quit()
+
+    app.qt_app.quit.assert_called_once()
+
+
 def test_on_quit_is_idempotent():
     """Tray menu and window-close can both fire it; the second must no-op."""
     app = _quittable_app()
