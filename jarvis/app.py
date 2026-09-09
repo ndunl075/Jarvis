@@ -543,7 +543,6 @@ class JarvisApp:
     tray: TrayIcon
     orb: OverlayOrb
     hotkeys: HotkeyManager
-    research_panel: ResearchPanel
 
     def __init__(self) -> None:
         # Handler state. _cfg_snapshot is the last config the UI published,
@@ -554,6 +553,9 @@ class JarvisApp:
         # Panels that _on_quit and the tray handlers must tolerate being
         # absent: these were the `[None]` cells run() carried for exactly
         # the same reason, and they are read before _build_ui has run.
+        # (_on_config_change reads research_panel that way; _on_quit does
+        # not, which is run()'s asymmetry, kept.)
+        self.research_panel: ResearchPanel | None = None
         self.deep_research_panel: DeepResearchPanel | None = None
         self.notes_panel: NotesPanel | None = None
         self.dashboard_panel: DashboardPanel | None = None
