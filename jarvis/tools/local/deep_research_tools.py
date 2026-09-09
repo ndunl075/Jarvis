@@ -6,10 +6,11 @@ import asyncio
 import logging
 import queue
 from collections.abc import Awaitable, Callable
+from typing import ClassVar
 
 from pydantic import BaseModel, Field
 
-from jarvis.tools.registry import EmptyArgs, ToolResult
+from jarvis.tools.registry import EmptyArgs, ToolResult, VoicePattern
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +34,14 @@ class DeepResearchTool:
     )
     args_schema = DeepResearchArgs
     requires_confirmation: bool = False
+    # 120: after the ultra toggles (90-110), before quick research (200).
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^(?:jarvis,?\s+)?(?:do\s+)?deep\s+research(?:\s+on)?\s+(.+)$",
+            priority=120,
+            args=lambda m: {"query": m.group(1)},
+        ),
+    )
 
     def __init__(
         self,
@@ -90,6 +99,9 @@ class PauseDeepResearchTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(regex=r"^pause\s+deep\s+research$", priority=130),
+    )
 
     def __init__(self, *, on_pause: Callable[[], None]) -> None:
         self._on_pause = on_pause
@@ -110,6 +122,10 @@ class ResumeDeepResearchTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(regex=r"^resume\s+deep\s+research$", priority=140),
+        VoicePattern(regex=r"^continue\s+deep\s+research$", priority=150),
+    )
 
     def __init__(
         self,
@@ -150,6 +166,9 @@ class CloseDeepResearchTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(regex=r"^close\s+deep\s+research$", priority=160),
+    )
 
     def __init__(self, *, close_callback: Callable[[], None]) -> None:
         self._close = close_callback
@@ -179,6 +198,21 @@ class DeleteDeepResearchTool:
     )
     args_schema = DeleteDeepResearchArgs
     requires_confirmation: bool = False
+    # 180 before 190: the <query> form must be tried before the bare
+    # form, which then acts as the "delete the active session" fallback.
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^(?:delete|remove)\s+(?:the\s+)?deep\s+research"
+            r"(?:\s+(?:on|about))?\s+(.+)$",
+            priority=180,
+            args=lambda m: {"query": m.group(1)},
+        ),
+        VoicePattern(
+            regex=r"^(?:delete|remove)\s+(?:the\s+)?deep\s+research$",
+            priority=190,
+            args=lambda m: {"query": ""},
+        ),
+    )
 
     def __init__(
         self,
@@ -223,6 +257,16 @@ class DeleteAllDeepResearchTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    # 170: MUST beat DeleteDeepResearchTool's <query> capture (180) so
+    # "delete all deep research" is not read as deleting a session
+    # titled "all".
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^(?:delete|remove|clear)\s+all\s+deep\s+research"
+            r"(?:\s+(?:history|sessions))?$",
+            priority=170,
+        ),
+    )
 
     def __init__(self, *, delete_all: Callable[[], int]) -> None:
         self._delete_all = delete_all

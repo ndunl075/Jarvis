@@ -43,8 +43,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import ClassVar, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ValidationError
 
@@ -93,6 +94,86 @@ class Tool(Protocol):
     requires_confirmation: bool
 
     async def execute(self, args: BaseModel) -> ToolResult: ...
+
+
+# --- voice patterns (optional tool capability) ------------------------
+
+# Priority ordering for the router's pattern layer.
+#
+# The layer is FIRST-MATCH-WINS, so priority *is* precedence: a lower
+# number is tried earlier and therefore wins an utterance both patterns
+# could match. Declaration order and registration order deliberately do
+# not decide anything — a tool declaring a pattern cannot accidentally
+# jump the queue by being imported or registered sooner.
+#
+# Numbering convention: the built-in table is spaced by 10 so a new
+# pattern can be slotted between any two existing ones without renumbering.
+# The two constants below name the only two bands that carry meaning
+# beyond "earlier than the next one":
+#
+#   PRIORITY_DEFAULT   a tightly-anchored pattern with no known overlap.
+#                      Safe for a new tool that matches a distinctive
+#                      phrase ("show the fridge inventory").
+#   PRIORITY_CATCH_ALL a permissive "<verb> <anything>" pattern that must
+#                      lose to every more specific phrasing. `open_app`'s
+#                      ^open\s+(.+)$ lives here: it is the reason
+#                      "open my notes" opens notes rather than launching
+#                      an app named "my notes".
+#
+# Anything that can be shadowed by, or can shadow, another tool's pattern
+# needs an explicit number and a comment saying what it must beat.
+PRIORITY_DEFAULT = 500
+PRIORITY_CATCH_ALL = 900
+
+
+def _no_args(match: re.Match[str]) -> dict:  # noqa: ARG001
+    """Default arg builder: the pattern is a bare command with no captures."""
+    return {}
+
+
+@dataclass(frozen=True, slots=True)
+class VoicePattern:
+    """A regex that routes an utterance straight to the owning tool,
+    skipping the LLM entirely.
+
+    Declared as a `voice_patterns` class attribute on the tool so the
+    phrasing lives next to the implementation it dispatches to, rather
+    than in a hand-maintained table in the router.
+
+    `regex` is matched (``re.Pattern.match``) against the *normalized*
+    transcription — lowercased, trailing punctuation stripped, leading
+    fillers ("hey jarvis", "could you please") peeled off. Write patterns
+    lowercase and anchored at both ends unless a trailing capture is
+    intended.
+
+    `args` maps the successful match to the tool's argument dict; the
+    default produces ``{}`` for no-argument commands.
+
+    `priority` is the router's ordering key — see PRIORITY_DEFAULT /
+    PRIORITY_CATCH_ALL above. It is required precisely because it must be
+    a deliberate decision."""
+
+    regex: str
+    priority: int
+    args: Callable[[re.Match[str]], dict] = field(default=_no_args)
+
+
+@runtime_checkable
+class VoiceRoutable(Protocol):
+    """Optional extension to `Tool`: a tool that can be reached by the
+    router's deterministic pattern layer as well as by LLM tool-calling.
+
+    Deliberately a SEPARATE protocol rather than an optional member on
+    `Tool`. `Tool` is @runtime_checkable, and isinstance() against a
+    runtime_checkable Protocol is a hasattr() check over every declared
+    member — adding `voice_patterns` to `Tool` would make
+    ``isinstance(mcp_tool, Tool)`` start returning False for every
+    MCP-adapted tool, which structurally satisfies `Tool` today and has
+    no voice patterns by construction. Keeping it separate means MCP
+    tools stay valid `Tool`s and are simply not `VoiceRoutable`."""
+
+    name: str
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]]
 
 
 class ToolNameCollisionError(ValueError):

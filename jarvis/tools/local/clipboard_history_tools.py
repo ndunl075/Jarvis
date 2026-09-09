@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from typing import ClassVar
 
 from pydantic import BaseModel, Field
 
-from jarvis.tools.registry import EmptyArgs, ToolResult
+from jarvis.tools.registry import EmptyArgs, ToolResult, VoicePattern
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +22,15 @@ class ShowClipboardHistoryTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    # 260: must beat open_app's catch-all for "open clipboard history".
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^(?:show|open|bring\s+up)\s+(?:the\s+|my\s+)?"
+            r"clipboard\s+history$",
+            priority=260,
+        ),
+        VoicePattern(regex=r"^what\s+have\s+i\s+copied\??$", priority=270),
+    )
 
     def __init__(self, *, on_open: Callable[[], None]) -> None:
         self._on_open = on_open
@@ -41,6 +51,12 @@ class CloseClipboardHistoryTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^close\s+(?:the\s+|my\s+)?clipboard\s+history$",
+            priority=280,
+        ),
+    )
 
     def __init__(self, *, on_close: Callable[[], None]) -> None:
         self._on_close = on_close
@@ -70,6 +86,18 @@ class PasteClipboardItemTool:
     )
     args_schema = PasteClipboardItemArgs
     requires_confirmation: bool = False
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^paste\s+(?:item\s+)?(?:my\s+)?last\s+copy$",
+            priority=300,
+            args=lambda m: {"index": 1},
+        ),
+        VoicePattern(
+            regex=r"^paste\s+item\s+(\d{1,2})$",
+            priority=310,
+            args=lambda m: {"index": int(m.group(1))},
+        ),
+    )
 
     def __init__(self, *, on_paste: Callable[[int], str | None]) -> None:
         self._on_paste = on_paste
@@ -95,6 +123,12 @@ class ClearClipboardHistoryTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^clear\s+(?:the\s+|my\s+)?clipboard\s+history$",
+            priority=290,
+        ),
+    )
 
     def __init__(self, *, on_clear: Callable[[], int]) -> None:
         self._on_clear = on_clear

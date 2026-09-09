@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from typing import ClassVar
 
-from jarvis.tools.registry import EmptyArgs, ToolResult
+from jarvis.tools.registry import EmptyArgs, ToolResult, VoicePattern
 
 log = logging.getLogger(__name__)
 
@@ -20,6 +21,16 @@ class EnableDeepResearchUltraTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    # 90: ahead of DeepResearchTool (120) so "use ultra research" is a
+    # mode toggle, not a research query.
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^(?:jarvis,?\s+)?(?:enable|turn\s+on|use)\s+"
+            r"(?:(?:deep\s+research\s+)?ultra(?:\s+(?:research|mode))?"
+            r"|ultra\s+research)$",
+            priority=90,
+        ),
+    )
 
     def __init__(self, *, set_ultra: Callable[[bool], str]) -> None:
         self._set_ultra = set_ultra
@@ -38,6 +49,18 @@ class DisableDeepResearchUltraTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^(?:jarvis,?\s+)?(?:disable|turn\s+off)\s+"
+            r"(?:(?:deep\s+research\s+)?ultra(?:\s+(?:research|mode))?"
+            r"|ultra\s+research)$",
+            priority=100,
+        ),
+        VoicePattern(
+            regex=r"^(?:jarvis,?\s+)?(?:use\s+)?normal\s+deep\s+research$",
+            priority=110,
+        ),
+    )
 
     def __init__(self, *, set_ultra: Callable[[bool], str]) -> None:
         self._set_ultra = set_ultra

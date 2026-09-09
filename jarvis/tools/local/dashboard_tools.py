@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import ClassVar
 
-from jarvis.tools.registry import EmptyArgs, ToolResult
+from jarvis.tools.registry import EmptyArgs, ToolResult, VoicePattern
 
 
 class ShowDashboardTool:
@@ -17,6 +18,18 @@ class ShowDashboardTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    # 230/240: the "my"/"the" alternatives plus these priorities are what
+    # stop open_app's catch-all (900) from stealing "open my dashboard".
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^(?:show|open|bring\s+up)\s+(?:the\s+|my\s+)?dashboard$",
+            priority=230,
+        ),
+        VoicePattern(
+            regex=r"^(?:show|open)\s+(?:me\s+)?(?:the\s+|my\s+)?system\s+stats$",
+            priority=240,
+        ),
+    )
 
     def __init__(self, *, on_open: Callable[[], None]) -> None:
         self._on_open = on_open
@@ -33,6 +46,11 @@ class CloseDashboardTool:
     )
     args_schema = EmptyArgs
     requires_confirmation: bool = False
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^close\s+(?:the\s+|my\s+)?dashboard$", priority=250
+        ),
+    )
 
     def __init__(self, *, on_close: Callable[[], None]) -> None:
         self._on_close = on_close

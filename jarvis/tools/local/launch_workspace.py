@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
+from typing import ClassVar
 
 from jarvis.core.config import WorkspaceAppEntry
 from jarvis.platform import windows as winplat
 from jarvis.tools.local.open_app import _APP_ALIASES, _needs_path_launch
-from jarvis.tools.registry import EmptyArgs, ToolResult
+from jarvis.tools.registry import EmptyArgs, ToolResult, VoicePattern
 
 log = logging.getLogger(__name__)
 
@@ -80,6 +81,14 @@ def _workspace_description(apps: list[WorkspaceAppEntry]) -> str:
 class LaunchWorkspaceTool:
     name: str = "launch_workspace"
     requires_confirmation: bool = False
+    # 220: must beat open_app's catch-all so "open my workspace" opens
+    # the workspace rather than an app called "my workspace".
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^(?:jarvis,?\s+)?(?:open|launch|start)\s+(?:my\s+)?workspace$",
+            priority=220,
+        ),
+    )
     args_schema = EmptyArgs
 
     def __init__(self, *, workspace_apps: list[WorkspaceAppEntry] | None = None) -> None:

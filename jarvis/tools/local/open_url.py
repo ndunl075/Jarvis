@@ -12,13 +12,14 @@ fallback for unknown sites)."""
 from __future__ import annotations
 
 import asyncio
-from urllib.parse import parse_qs, urlparse
+from typing import ClassVar
+from urllib.parse import parse_qs, quote_plus, urlparse
 
 from pydantic import BaseModel, Field
 
 from jarvis.platform import windows as winplat
 from jarvis.tools.local.youtube import youtube_watch_url_from_url
-from jarvis.tools.registry import ToolResult
+from jarvis.tools.registry import ToolResult, VoicePattern
 
 # Hand-curated readable names for sites that come up in conversational
 # voice use. Extend as needed; unknown domains fall back to the
@@ -84,6 +85,19 @@ class OpenUrlTool:
     )
     args_schema = OpenUrlArgs
     requires_confirmation: bool = False
+    # 500: "search <q>" / "google <q>". The `(?:up|for)\s+` sits inside
+    # the optional group WITH a trailing \s+ so a query starting with
+    # "forty" is not shaved to "ty". quote_plus (not quote) — Google's
+    # search URL wants "+" for spaces; a live test caught that.
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^(?:search|google)\s+(?:(?:up|for)\s+)?(.+)$",
+            priority=500,
+            args=lambda m: {
+                "url": "https://www.google.com/search?q=" + quote_plus(m.group(1))
+            },
+        ),
+    )
 
     async def execute(self, args: OpenUrlArgs) -> ToolResult:
         parsed = urlparse(args.url)

@@ -9,12 +9,12 @@ keyboards trigger and behaves identically."""
 from __future__ import annotations
 
 import asyncio
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, Field
 
 from jarvis.platform import windows as winplat
-from jarvis.tools.registry import ToolResult
+from jarvis.tools.registry import ToolResult, VoicePattern
 
 
 class VolumeArgs(BaseModel):
@@ -39,6 +39,13 @@ class VolumeTool:
     )
     args_schema = VolumeArgs
     requires_confirmation: bool = False
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^volume\s+(up|down|mute|unmute)$",
+            priority=10,
+            args=lambda m: {"action": m.group(1)},
+        ),
+    )
 
     async def execute(self, args: VolumeArgs) -> ToolResult:
         try:

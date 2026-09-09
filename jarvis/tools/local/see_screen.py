@@ -31,11 +31,12 @@ import base64
 import io
 import logging
 from datetime import datetime
+from typing import ClassVar
 
 from pydantic import BaseModel, Field
 
 from jarvis.platform import windows as winplat
-from jarvis.tools.registry import ToolResult
+from jarvis.tools.registry import ToolResult, VoicePattern
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +73,36 @@ class SeeScreenTool:
     )
     args_schema: type[BaseModel] = SeeScreenArgs
     requires_confirmation: bool = False
+    # 380-410: the trailing "screen|display|monitor" anchors the tool so
+    # the generic verbs (open, close, lock, read) keep their own
+    # patterns. Kept ahead of the notes patterns (420+) so "read my
+    # screen" can never be read as a note title.
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^(?:look\s+at|see|read|describe)\s+(?:my\s+|the\s+)?"
+            r"(?:screen|display|monitor)$",
+            priority=380,
+        ),
+        # The suffix is required so "what's" alone never fires a tool.
+        VoicePattern(
+            regex=r"^what(?:'s|\s+is)\s+on\s+(?:my\s+|the\s+)?"
+            r"(?:screen|display|monitor)$",
+            priority=390,
+        ),
+        # "see" here is the visual verb, not the tool name.
+        VoicePattern(
+            regex=r"^what\s+(?:do|can)\s+you\s+see"
+            r"(?:\s+on\s+(?:my\s+|the\s+)?(?:screen|display|monitor))?$",
+            priority=400,
+        ),
+        # Subsumed by priority 380 after filler-stripping turns
+        # "can you see my screen" into "see my screen"; kept because
+        # removing it would be a behaviour change to prove rather than
+        # assume, and it costs one regex.
+        VoicePattern(
+            regex=r"^(?:can\s+you\s+)?see\s+my\s+screen$", priority=410
+        ),
+    )
 
     def __init__(
         self,

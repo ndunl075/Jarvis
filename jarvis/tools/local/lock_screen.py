@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from typing import ClassVar
 
 from pydantic import BaseModel
 
 from jarvis.platform import windows as winplat
-from jarvis.tools.registry import EmptyArgs, ToolResult
+from jarvis.tools.registry import EmptyArgs, ToolResult, VoicePattern
 
 
 class LockScreenTool:
@@ -22,6 +23,11 @@ class LockScreenTool:
     # by signing back in. requires_confirmation stays False until Phase 6+
     # wires hotkey-based cancellation (see registry.py header).
     requires_confirmation: bool = False
+    voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
+        VoicePattern(
+            regex=r"^lock\s+(?:the\s+)?(?:screen|my\s+pc|pc)$", priority=30
+        ),
+    )
 
     async def execute(self, args: EmptyArgs) -> ToolResult:
         try:

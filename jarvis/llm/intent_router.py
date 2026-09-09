@@ -105,7 +105,6 @@ import re
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
-from urllib.parse import quote_plus
 
 from jarvis.llm.conversation import ToolExchange
 
@@ -239,304 +238,70 @@ def _what_time_intent(
 def _build_patterns(
     time_provider: Callable[[], datetime.datetime],
 ) -> list[tuple[re.Pattern, Callable[[re.Match], Intent]]]:
-    """First-match-wins table. More specific patterns first."""
-    return [
-        # volume up/down/mute/unmute
-        (
-            re.compile(r"^volume\s+(up|down|mute|unmute)$"),
-            lambda m: ToolIntent("volume", {"action": m.group(1)}),
-        ),
-        # screenshot, take a screenshot, take screenshot
-        (
-            re.compile(r"^(?:take\s+(?:a\s+)?)?screenshot$"),
-            lambda m: ToolIntent("screenshot", {}),
-        ),
-        # lock the screen, lock my pc, lock pc, lock screen
-        (
-            re.compile(r"^lock\s+(?:the\s+)?(?:screen|my\s+pc|pc)$"),
-            lambda m: ToolIntent("lock_screen", {}),
-        ),
-        # what time is it / what's the time / what is the time
-        (
-            re.compile(
-                r"^what(?:'s|\s+is)\s+(?:the\s+)?time(?:\s+is\s+it)?$"
+    r"""Assemble the first-match-wins pattern table.
+
+    The table used to be a hand-ordered literal here; the regexes now live
+    on the tool classes they dispatch to, as `voice_patterns` class
+    attributes (see `jarvis.tools.registry.VoicePattern`), and are
+    collected by `jarvis.tools.catalogue.voice_pattern_catalogue()`.
+
+    ORDERING IS BEHAVIOUR. The layer is first-match-wins, so the position
+    of a pattern decides which tool wins an utterance two patterns could
+    both match. Order therefore comes from each pattern's explicit integer
+    `priority` (lower runs first) and from nothing else — not declaration
+    order, not catalogue order, and above all not registration order. The
+    canonical example: `open_app`'s `^open\s+(.+)$` carries
+    PRIORITY_CATCH_ALL so "open my notes", "open the dashboard", "open
+    logs", "open my workspace", "open clipboard history" and "open help"
+    are each claimed by their own tool first. `tests/llm/
+    test_router_pattern_equivalence.py` pins the assembled order against a
+    golden captured before this refactor.
+
+    The two time patterns below are the only router-native entries left:
+    they answer locally with a SpeakIntent and have no tool to hang off.
+    They are merged into the same priority-sorted sequence rather than
+    being special-cased at the front, so their precedence is stated the
+    same way every other pattern's is.
+
+    The catalogue import is function-local (the same idiom as
+    `jarvis.tools.setup_local_tools`) so importing the router does not pull
+    in every tool module; this runs once per IntentRouter construction.
+    """
+    from jarvis.tools.catalogue import voice_pattern_catalogue
+
+    entries: list[tuple[int, int, str, Callable[[re.Match], Intent]]] = []
+
+    # -- router-native patterns (answered locally, no tool involved) ---
+    # "what's the time" / "what is the time" / "what time is it".
+    entries.append((
+        40, 0,
+        r"^what(?:'s|\s+is)\s+(?:the\s+)?time(?:\s+is\s+it)?$",
+        lambda m: _what_time_intent(time_provider),  # noqa: ARG005
+    ))
+    entries.append((
+        50, 1,
+        r"^what\s+time\s+is\s+it$",
+        lambda m: _what_time_intent(time_provider),  # noqa: ARG005
+    ))
+
+    # -- tool-declared patterns ----------------------------------------
+    for seq, (tool_name, vp) in enumerate(voice_pattern_catalogue()):
+        entries.append((
+            vp.priority,
+            seq,
+            vp.regex,
+            # Defaults bind the loop variables; without them every builder
+            # would close over the last iteration's tool.
+            lambda m, _name=tool_name, _args=vp.args: ToolIntent(
+                _name, _args(m)
             ),
-            lambda m: _what_time_intent(time_provider),
-        ),
-        (
-            re.compile(r"^what\s+time\s+is\s+it$"),
-            lambda m: _what_time_intent(time_provider),
-        ),
-        # research panel tools (before generic google search)
-        (
-            re.compile(r"^close\s+research$"),
-            lambda m: ToolIntent("close_research", {}),
-        ),
-        (
-            re.compile(r"^(?:read\s+more|continue|keep\s+going)$"),
-            lambda m: ToolIntent("read_more", {}),
-        ),
-        (
-            re.compile(r"^copy\s+(?:that|research|the\s+summary)$"),
-            lambda m: ToolIntent("copy_research", {}),
-        ),
-        # deep research ultra toggle (before topic deep research)
-        (
-            re.compile(
-                r"^(?:jarvis,?\s+)?(?:enable|turn\s+on|use)\s+"
-                r"(?:(?:deep\s+research\s+)?ultra(?:\s+(?:research|mode))?|ultra\s+research)$"
-            ),
-            lambda m: ToolIntent("enable_deep_research_ultra", {}),
-        ),
-        (
-            re.compile(
-                r"^(?:jarvis,?\s+)?(?:disable|turn\s+off)\s+"
-                r"(?:(?:deep\s+research\s+)?ultra(?:\s+(?:research|mode))?|ultra\s+research)$"
-            ),
-            lambda m: ToolIntent("disable_deep_research_ultra", {}),
-        ),
-        (
-            re.compile(
-                r"^(?:jarvis,?\s+)?(?:use\s+)?normal\s+deep\s+research$"
-            ),
-            lambda m: ToolIntent("disable_deep_research_ultra", {}),
-        ),
-        # deep research (must precede quick "research …")
-        (
-            re.compile(
-                r"^(?:jarvis,?\s+)?(?:do\s+)?deep\s+research(?:\s+on)?\s+(.+)$"
-            ),
-            lambda m: ToolIntent("deep_research", {"query": m.group(1)}),
-        ),
-        (
-            re.compile(r"^pause\s+deep\s+research$"),
-            lambda m: ToolIntent("pause_deep_research", {}),
-        ),
-        (
-            re.compile(r"^resume\s+deep\s+research$"),
-            lambda m: ToolIntent("resume_deep_research", {}),
-        ),
-        (
-            re.compile(r"^continue\s+deep\s+research$"),
-            lambda m: ToolIntent("resume_deep_research", {}),
-        ),
-        (
-            re.compile(r"^close\s+deep\s+research$"),
-            lambda m: ToolIntent("close_deep_research", {}),
-        ),
-        (
-            re.compile(r"^(?:delete|remove|clear)\s+all\s+deep\s+research(?:\s+(?:history|sessions))?$"),
-            lambda m: ToolIntent("delete_all_deep_research", {}),
-        ),
-        (
-            re.compile(
-                r"^(?:delete|remove)\s+(?:the\s+)?deep\s+research(?:\s+(?:on|about))?\s+(.+)$"
-            ),
-            lambda m: ToolIntent("delete_deep_research", {"query": m.group(1)}),
-        ),
-        (
-            re.compile(r"^(?:delete|remove)\s+(?:the\s+)?deep\s+research$"),
-            lambda m: ToolIntent("delete_deep_research", {"query": ""}),
-        ),
-        (
-            re.compile(r"^research\s+(.+)$"),
-            lambda m: ToolIntent("research", {"query": m.group(1)}),
-        ),
-        (
-            re.compile(r"^look\s+up\s+(.+)$"),
-            lambda m: ToolIntent("research", {"query": m.group(1)}),
-        ),
-        # open / launch / start (my) workspace — includes "jarvis open my workspace"
-        (
-            re.compile(
-                r"^(?:jarvis,?\s+)?(?:open|launch|start)\s+(?:my\s+)?workspace$"
-            ),
-            lambda m: ToolIntent("launch_workspace", {}),
-        ),
-        # Dashboard. The "my/the" alternatives matter: without them the
-        # catch-all "open <anything>" pattern below would steal "open my
-        # dashboard" and route it to open_app.
-        (
-            re.compile(
-                r"^(?:show|open|bring\s+up)\s+(?:the\s+|my\s+)?dashboard$"
-            ),
-            lambda m: ToolIntent("show_dashboard", {}),
-        ),
-        (
-            re.compile(
-                r"^(?:show|open)\s+(?:me\s+)?(?:the\s+|my\s+)?system\s+stats$"
-            ),
-            lambda m: ToolIntent("show_dashboard", {}),
-        ),
-        (
-            re.compile(r"^close\s+(?:the\s+|my\s+)?dashboard$"),
-            lambda m: ToolIntent("close_dashboard", {}),
-        ),
-        # Clipboard history
-        (
-            re.compile(
-                r"^(?:show|open|bring\s+up)\s+(?:the\s+|my\s+)?clipboard\s+history$"
-            ),
-            lambda m: ToolIntent("show_clipboard_history", {}),
-        ),
-        (
-            re.compile(r"^what\s+have\s+i\s+copied\??$"),
-            lambda m: ToolIntent("show_clipboard_history", {}),
-        ),
-        (
-            re.compile(r"^close\s+(?:the\s+|my\s+)?clipboard\s+history$"),
-            lambda m: ToolIntent("close_clipboard_history", {}),
-        ),
-        (
-            re.compile(r"^clear\s+(?:the\s+|my\s+)?clipboard\s+history$"),
-            lambda m: ToolIntent("clear_clipboard_history", {}),
-        ),
-        (
-            re.compile(r"^paste\s+(?:item\s+)?(?:my\s+)?last\s+copy$"),
-            lambda m: ToolIntent("paste_clipboard_item", {"index": 1}),
-        ),
-        (
-            re.compile(r"^paste\s+item\s+(\d{1,2})$"),
-            lambda m: ToolIntent(
-                "paste_clipboard_item", {"index": int(m.group(1))}
-            ),
-        ),
-        # Logs
-        (
-            re.compile(
-                r"^(?:show|open|bring\s+up)\s+(?:me\s+)?(?:the\s+|my\s+)?logs?$"
-            ),
-            lambda m: ToolIntent("show_logs", {}),
-        ),
-        (
-            re.compile(r"^show\s+(?:me\s+)?errors$"),
-            lambda m: ToolIntent("show_logs", {}),
-        ),
-        (
-            re.compile(r"^close\s+(?:the\s+|my\s+)?logs?$"),
-            lambda m: ToolIntent("close_logs", {}),
-        ),
-        # Help / capabilities
-        (
-            re.compile(r"^(?:show|open)\s+(?:the\s+|my\s+)?help$"),
-            lambda m: ToolIntent("open_help", {}),
-        ),
-        (
-            re.compile(r"^(?:show|open)\s+(?:my\s+|the\s+)?capabilities$"),
-            lambda m: ToolIntent("open_help", {}),
-        ),
-        (
-            re.compile(r"^what\s+can\s+(?:you|i)\s+(?:do|say)\??$"),
-            lambda m: ToolIntent("open_help", {}),
-        ),
-        # See screen (vision). MUST precede the notes patterns below
-        # because "read my screen" would otherwise match the
-        # `read (.+) note` regex and route to read_note("screen").
-        # `look at` / `see` / `read` / `describe` cover the natural
-        # phrasings; the trailing "screen|display|monitor" anchors the
-        # tool so generic verbs (open, close, lock) keep their own
-        # patterns. Snappier than letting the LLM tool-call.
-        (
-            re.compile(
-                r"^(?:look\s+at|see|read|describe)\s+(?:my\s+|the\s+)?"
-                r"(?:screen|display|monitor)$"
-            ),
-            lambda m: ToolIntent("see_screen", {}),
-        ),
-        # "what's on my screen" / "what is on the screen" — the suffix
-        # is required so "what's" alone never triggers a tool call.
-        (
-            re.compile(
-                r"^what(?:'s|\s+is)\s+on\s+(?:my\s+|the\s+)?"
-                r"(?:screen|display|monitor)$"
-            ),
-            lambda m: ToolIntent("see_screen", {}),
-        ),
-        # "what do you see" / "what can you see" optionally followed by
-        # "on my screen". "see" here is the visual verb, not the tool
-        # name — kept separate from the look-at pattern above for clarity.
-        (
-            re.compile(
-                r"^what\s+(?:do|can)\s+you\s+see"
-                r"(?:\s+on\s+(?:my\s+|the\s+)?(?:screen|display|monitor))?$"
-            ),
-            lambda m: ToolIntent("see_screen", {}),
-        ),
-        # "can you see my screen" / "see my screen"
-        (
-            re.compile(r"^(?:can\s+you\s+)?see\s+my\s+screen$"),
-            lambda m: ToolIntent("see_screen", {}),
-        ),
-        # Notes
-        (
-            re.compile(r"^(?:open|show|bring\s+up)\s+(?:my\s+|the\s+)?notes$"),
-            lambda m: ToolIntent("open_notes", {}),
-        ),
-        (
-            re.compile(r"^close\s+(?:my\s+|the\s+)?notes$"),
-            lambda m: ToolIntent("close_notes", {}),
-        ),
-        (
-            re.compile(
-                r"^(?:take\s+a\s+note|jot\s+(?:this\s+)?down|write\s+(?:this\s+)?down|note\s+that|remember\s+this)"
-                r"(?:\s+(?:that|about|saying))?[:\s]+(.+)$"
-            ),
-            lambda m: ToolIntent("take_note", {"content": m.group(1)}),
-        ),
-        (
-            re.compile(r"^read\s+(?:this|the\s+current|my\s+current)\s+note$"),
-            lambda m: ToolIntent("read_note", {"title": ""}),
-        ),
-        (
-            re.compile(
-                r"^read\s+(?:me\s+)?(?:my\s+|the\s+)?(.+?)\s+notes?$"
-            ),
-            lambda m: ToolIntent("read_note", {"title": m.group(1)}),
-        ),
-        (
-            re.compile(r"^delete\s+(?:this|the\s+current)\s+note$"),
-            lambda m: ToolIntent("delete_note", {"title": ""}),
-        ),
-        (
-            re.compile(
-                r"^delete\s+(?:the\s+)?(.+?)\s+note$"
-            ),
-            lambda m: ToolIntent("delete_note", {"title": m.group(1)}),
-        ),
-        (
-            re.compile(
-                r"^(?:add|append)\s+(?:this\s+)?to\s+(?:my\s+|the\s+)?(.+?)\s+note[:\s]+(.+)$"
-            ),
-            lambda m: ToolIntent(
-                "append_to_note", {"title": m.group(1), "content": m.group(2)}
-            ),
-        ),
-        # search <query>, google <query>, search for <query>, search up
-        # <query>, google for <query>. The `(?:up|for)\s+` is inside the
-        # optional group with a trailing \s+ so a query starting with
-        # 'forty' isn't shaved to 'ty' by the regex hungrily eating
-        # 'for'. quote_plus (not quote) — Google's search URL expects
-        # '+' for spaces; the live test caught the encoding mismatch.
-        (
-            re.compile(r"^(?:search|google)\s+(?:(?:up|for)\s+)?(.+)$"),
-            lambda m: ToolIntent(
-                "open_url",
-                {
-                    "url": (
-                        "https://www.google.com/search?q="
-                        + quote_plus(m.group(1))
-                    ),
-                },
-            ),
-        ),
-        # open <app> -- catches "open spotify", "open my browser", etc.
-        # play / launch / start games or music -> LLM picks the right tool.
-        # Placed last because it's the most permissive.
-        (
-            re.compile(r"^open\s+(.+)$"),
-            lambda m: ToolIntent("open_app", {"name": m.group(1)}),
-        ),
-    ]
+        ))
+
+    # Stable sort on (priority, tiebreak). The tiebreak only ever fires
+    # for two patterns given the same number, which the built-in set
+    # never does.
+    entries.sort(key=lambda e: (e[0], e[1]))
+    return [(re.compile(regex), builder) for _p, _s, regex, builder in entries]
 
 
 # --- router ----------------------------------------------------------
