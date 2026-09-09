@@ -530,7 +530,6 @@ def _foreground_window_title() -> str:
     """Best-effort Windows-only foreground window title."""
     try:
         import ctypes
-        import ctypes.wintypes as wt
 
         user32 = ctypes.windll.user32
         hwnd = user32.GetForegroundWindow()

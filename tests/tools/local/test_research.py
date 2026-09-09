@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import queue
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 from jarvis.tools.local.research import (
     CloseResearchTool,
@@ -18,7 +18,7 @@ from jarvis.tools.registry import EmptyArgs
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def _make_tool(on_start=None):

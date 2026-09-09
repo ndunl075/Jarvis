@@ -149,7 +149,7 @@ class _CaptureButton(QPushButton):
         self._render()
         self.setFocus(Qt.FocusReason.MouseFocusReason)
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802 - Qt override
         if not self._capturing:
             return super().keyPressEvent(event)
         if event.key() == Qt.Key.Key_Escape:

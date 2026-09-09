@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
-from jarvis.tools.local.weather import WeatherArgs, WeatherTool, _WMO, _geocode_queries
+from jarvis.tools.local.weather import _WMO, WeatherArgs, WeatherTool, _geocode_queries
 
 
 def _cfg(lat=None, lon=None, unit="fahrenheit"):

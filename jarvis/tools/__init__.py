@@ -1,23 +1,23 @@
 """Tool protocol, registry, and tool implementations.
 
 Public surface:
-  - Tool, ToolResult, EmptyArgs:       protocol + return type
-  - ToolRegistry, ToolNameCollision:   registry + collision exception
-  - TOOL_NAME_REGEX:                   shared name-validity regex
+  - Tool, ToolResult, EmptyArgs:            protocol + return type
+  - ToolRegistry, ToolNameCollisionError:  registry + collision exception
+  - TOOL_NAME_REGEX:                       shared name-validity regex
 
 Local tool implementations live under jarvis/tools/local/. MCP-adapted
 tools live under jarvis/tools/mcp_client.py (Phase 4 Task 3).
 """
 
+from jarvis.tools.mcp_client import MCPManager, MCPServerConnection, MCPTool
 from jarvis.tools.registry import (
     TOOL_NAME_REGEX,
     EmptyArgs,
     Tool,
-    ToolNameCollision,
+    ToolNameCollisionError,
     ToolRegistry,
     ToolResult,
 )
-from jarvis.tools.mcp_client import MCPManager, MCPServerConnection, MCPTool
 
 
 def setup_local_tools(
@@ -43,9 +43,9 @@ def setup_local_tools(
     from jarvis.tools.local.clipboard import ClipboardTool
     from jarvis.tools.local.close_app import CloseAppTool
     from jarvis.tools.local.files import ListDirectoryTool
-    from jarvis.tools.local.lock_screen import LockScreenTool
     from jarvis.tools.local.launch_steam_game import LaunchSteamGameTool
     from jarvis.tools.local.launch_workspace import LaunchWorkspaceTool
+    from jarvis.tools.local.lock_screen import LockScreenTool
     from jarvis.tools.local.open_app import OpenAppTool
     from jarvis.tools.local.open_url import OpenUrlTool
     from jarvis.tools.local.play_youtube_music import PlayYoutubeMusicTool
@@ -64,7 +64,9 @@ def setup_local_tools(
     weather_save_fn = None
     if config is not None:
         from jarvis.core.config import save_config as _save_cfg
-        weather_save_fn = lambda: _save_cfg(config)  # type: ignore[arg-type]
+
+        def weather_save_fn() -> None:
+            _save_cfg(config)  # type: ignore[arg-type]
 
     from jarvis.core.config import WorkspaceConfig
 
@@ -112,7 +114,7 @@ __all__ = [
     "MCPServerConnection",
     "MCPTool",
     "Tool",
-    "ToolNameCollision",
+    "ToolNameCollisionError",
     "ToolRegistry",
     "ToolResult",
     "setup_local_tools",

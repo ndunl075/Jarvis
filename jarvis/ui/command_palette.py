@@ -30,11 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from jarvis.ui.capabilities import (
-    CAPABILITY_CATEGORIES,
-    Capability,
-    CapabilityCategory,
-)
+from jarvis.ui.capabilities import CAPABILITY_CATEGORIES
 
 log = logging.getLogger(__name__)
 

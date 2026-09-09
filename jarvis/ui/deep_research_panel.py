@@ -395,8 +395,8 @@ class DeepResearchPanel(QWidget):
         self._pause_btn.setStyleSheet(_HDR_BTN)
         self._progress_label.setText("Paused — resume anytime from RESUME or the list.")
         self._finish_queue(
-            f"Deep research paused, sir. Progress saved. "
-            f"Say resume deep research or use the panel."
+            "Deep research paused, sir. Progress saved. "
+            "Say resume deep research or use the panel."
         )
         self._worker = None
         self._refresh_session_list()

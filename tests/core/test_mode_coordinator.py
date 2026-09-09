@@ -27,7 +27,6 @@ from jarvis.core.lifecycle import LifecycleManager
 from jarvis.core.mode_coordinator import ModeCoordinator
 from jarvis.core.state_machine import Mode, StateMachine
 
-
 # --- fakes ----------------------------------------------------------------
 
 
@@ -239,7 +238,7 @@ async def test_mute_during_sleep_confirmation_is_ignored():
     # mute_task may or may not have completed; drive it to completion.
     try:
         await asyncio.wait_for(mute_task, timeout=1.0)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         mute_task.cancel()
 
     # End state: SLEEPING (sleep was the committed transition). The mute

@@ -28,7 +28,6 @@ from jarvis.tools.mcp_client import (
 )
 from jarvis.tools.registry import ToolRegistry, ToolResult
 
-
 # --- credential reading ------------------------------------------------
 
 
@@ -260,8 +259,8 @@ async def test_connect_unavailable_when_sdk_missing(monkeypatch):
     # Ensure the import fails: remove mcp from sys.modules and block import.
     monkeypatch.setitem(sys.modules, "mcp", None)
     conn = MCPServerConnection("trayce", "http://x/mcp", None)
-    from jarvis.tools.mcp_client import MCPUnavailable
-    with pytest.raises(MCPUnavailable):
+    from jarvis.tools.mcp_client import MCPUnavailableError
+    with pytest.raises(MCPUnavailableError):
         await conn.connect()
 
 
@@ -404,8 +403,8 @@ async def test_add_server_drops_colliding_tool(monkeypatch):
     class _Local:
         name = "trayce_search_context"
         description = "local"
-        from jarvis.tools.registry import EmptyArgs as _E
-        args_schema = _E
+        from jarvis.tools.registry import EmptyArgs as _EmptyArgs
+        args_schema = _EmptyArgs
         requires_confirmation = False
 
         async def execute(self, args):  # pragma: no cover

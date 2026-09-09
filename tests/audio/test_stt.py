@@ -101,11 +101,16 @@ async def test_load_passes_download_root(mock_whisper_class, tmp_path):
     assert kwargs["download_root"] == str(tmp_path)
 
 
-async def test_load_with_no_download_root_passes_none(mock_whisper_class):
+async def test_load_with_no_download_root_omits_the_kwarg(mock_whisper_class):
+    """With no download_root, `download_root`/`local_files_only` are left off
+    entirely so faster-whisper falls back to its own HuggingFace cache and is
+    still allowed to fetch the model. The two kwargs are only meaningful as a
+    pair (see stt.load)."""
     s = FasterWhisperSTT()
     await s.load()
     _, kwargs = mock_whisper_class.call_args
-    assert kwargs["download_root"] is None
+    assert "download_root" not in kwargs
+    assert "local_files_only" not in kwargs
 
 
 async def test_load_idempotent(mock_whisper_class):

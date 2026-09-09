@@ -309,7 +309,7 @@ def _default_cursor_path() -> str:
     )
 
 
-def _default_workspace_apps() -> list["WorkspaceAppEntry"]:
+def _default_workspace_apps() -> list[WorkspaceAppEntry]:
     """Dev-machine defaults; users customize in Settings → General."""
     return [
         WorkspaceAppEntry(
