@@ -333,7 +333,7 @@ async def test_resource_monitor_reconfigures_on_lifecycle_change():
     from jarvis.core.state_machine import StateMachine
     from jarvis.core.events import EventBus
 
-    bus = EventBus(loop=asyncio.get_event_loop())
+    bus = EventBus(loop=asyncio.get_running_loop())
     sm = StateMachine()
     coord = MagicMock()
     coord.request = AsyncMock()

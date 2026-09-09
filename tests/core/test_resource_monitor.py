@@ -73,8 +73,10 @@ def _make_monitor(
 
 
 def _make_bus() -> EventBus:
-    loop = asyncio.get_event_loop()
-    return EventBus(loop=loop)
+    # Every caller below is an `async def` test (pytest-asyncio auto mode), so
+    # there is always a running loop to bind to. Binding explicitly keeps the
+    # bus usable from the worker threads the monitor spawns.
+    return EventBus(loop=asyncio.get_running_loop())
 
 
 # --- tests --------------------------------------------------------------------

@@ -19,7 +19,7 @@ from jarvis.tools.registry import EmptyArgs
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def test_deep_research_empty_query():
