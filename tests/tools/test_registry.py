@@ -8,8 +8,6 @@ isolation on tool crashes."""
 
 from __future__ import annotations
 
-from typing import cast
-
 import pytest
 from pydantic import BaseModel, Field
 
@@ -25,14 +23,11 @@ from jarvis.tools.registry import (
 
 # --- fakes -------------------------------------------------------------
 #
-# These deliberately spell out the Tool protocol rather than duck-type it:
-# `args_schema` is declared `type[BaseModel]` and `execute` takes a bare
-# `BaseModel`, which is what the protocol says and what makes these fakes
-# assignable to `register()`. The registry validates raw args against
-# `args_schema` before it dispatches, so the concrete model each fake
-# actually receives is a `cast`, never a runtime check. Keep them
-# conformant: a change to the protocol should fail pyright here rather
-# than surface months later as an AttributeError in production.
+# Shaped exactly like a real tool in jarvis/tools/local: `args_schema`
+# annotated `type[BaseModel]`, `execute` narrowed to the fake's own args
+# model. `Tool` is a protocol generic in that model, so `register()`
+# checks these for conformance — a change to the protocol fails pyright
+# here rather than surfacing months later as an AttributeError.
 
 
 class _EchoArgs(BaseModel):
@@ -49,11 +44,10 @@ class _EchoTool:
     def __init__(self) -> None:
         self.executed_with: list[_EchoArgs] = []
 
-    async def execute(self, args: BaseModel) -> ToolResult:
-        echo = cast(_EchoArgs, args)
-        self.executed_with.append(echo)
+    async def execute(self, args: _EchoArgs) -> ToolResult:
+        self.executed_with.append(args)
         return ToolResult(
-            success=True, output=" ".join([echo.text] * echo.times)
+            success=True, output=" ".join([args.text] * args.times)
         )
 
 
@@ -63,7 +57,7 @@ class _NoArgsTool:
     args_schema: type[BaseModel] = EmptyArgs
     requires_confirmation: bool = False
 
-    async def execute(self, args: BaseModel) -> ToolResult:
+    async def execute(self, args: EmptyArgs) -> ToolResult:
         return ToolResult(success=True, output="pong")
 
 
@@ -73,7 +67,7 @@ class _CrashingTool:
     args_schema: type[BaseModel] = EmptyArgs
     requires_confirmation: bool = False
 
-    async def execute(self, args: BaseModel) -> ToolResult:
+    async def execute(self, args: EmptyArgs) -> ToolResult:
         raise RuntimeError("intentional test boom")
 
 
@@ -149,7 +143,7 @@ def test_register_built_in_then_mcp_clobber_is_blocked():
         args_schema: type[BaseModel] = _EchoArgs
         requires_confirmation: bool = False
 
-        async def execute(self, args: BaseModel) -> ToolResult:
+        async def execute(self, args: _EchoArgs) -> ToolResult:
             return ToolResult(success=True, output="from-mcp")
 
     with pytest.raises(ToolNameCollisionError):

@@ -683,10 +683,10 @@ def _make_router_with_registry(
     return r, llm, conv
 
 
-# The tool fakes below spell out the Tool protocol exactly — `args_schema`
-# declared `type[BaseModel]`, `execute` taking a bare `BaseModel` — so
-# `registry.register()` accepts them without a cast and a change to the
-# protocol fails pyright here instead of at runtime.
+# The tool fakes below are shaped like the real tools in
+# jarvis/tools/local: `args_schema` annotated `type[BaseModel]`, `execute`
+# narrowed to the fake's own args model. `Tool` is generic in that model,
+# so `registry.register()` checks them for conformance.
 
 
 class _PingTool:
@@ -695,7 +695,7 @@ class _PingTool:
     args_schema: type[BaseModel] = EmptyArgs
     requires_confirmation: bool = False
 
-    async def execute(self, args: BaseModel) -> ToolResult:
+    async def execute(self, args: EmptyArgs) -> ToolResult:
         return ToolResult(success=True, output="pong, sir.")
 
 
@@ -735,7 +735,7 @@ async def test_pattern_used_when_tool_is_registered():
         args_schema: type[BaseModel] = EmptyArgs
         requires_confirmation: bool = False
 
-        async def execute(self, args: BaseModel) -> ToolResult:  # pragma: no cover
+        async def execute(self, args: EmptyArgs) -> ToolResult:  # pragma: no cover
             return ToolResult(success=True)
 
     reg = ToolRegistry(ToolsConfig())
@@ -763,7 +763,7 @@ class _OkTool:
     def __init__(self, output: str | None = "tool said hi") -> None:
         self._output = output
 
-    async def execute(self, args: BaseModel) -> ToolResult:
+    async def execute(self, args: EmptyArgs) -> ToolResult:
         return ToolResult(success=True, output=self._output)
 
 
@@ -776,7 +776,7 @@ class _FailTool:
     def __init__(self, error: str | None = "things went wrong") -> None:
         self._error = error
 
-    async def execute(self, args: BaseModel) -> ToolResult:
+    async def execute(self, args: EmptyArgs) -> ToolResult:
         return ToolResult(success=False, error=self._error)
 
 
@@ -840,7 +840,7 @@ async def test_execute_intent_tool_with_dict_output_yields_generic_ok():
         args_schema: type[BaseModel] = EmptyArgs
         requires_confirmation: bool = False
 
-        async def execute(self, args: BaseModel) -> ToolResult:
+        async def execute(self, args: EmptyArgs) -> ToolResult:
             return ToolResult(success=True, output={"k": "v"})
 
     reg = ToolRegistry(ToolsConfig())

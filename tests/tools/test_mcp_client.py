@@ -419,7 +419,7 @@ async def test_add_server_drops_colliding_tool(monkeypatch):
         args_schema: type[BaseModel] = EmptyArgs
         requires_confirmation: bool = False
 
-        async def execute(self, args: BaseModel) -> ToolResult:  # pragma: no cover
+        async def execute(self, args: EmptyArgs) -> ToolResult:  # pragma: no cover
             return ToolResult(success=True)
 
     reg.register(_Local())
