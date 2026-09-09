@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from jarvis.core.config import (
     migrate,
     save_config,
 )
+from jarvis.platform import secrets as sec_mod
 
 # --- defaults --------------------------------------------------------------
 
@@ -930,3 +932,387 @@ def test_migrate_v19_to_v20_preserves_existing_vision_settings():
     assert out["vision"]["temperature"] == 0.5
 
 
+
+
+# --- v20 -> v21: secrets encrypted at rest (Windows DPAPI) ----------------
+#
+# Encryption is a persistence-boundary concern: save_config encrypts, and
+# load_config decrypts, so the in-memory JarvisConfig always holds plaintext.
+# These tests patch the DPAPI seam in jarvis.platform.secrets so the
+# encrypted paths run on Linux CI; tests/platform/test_secrets.py covers
+# that seam at the unit level.
+
+FAKE_MARKER = b"FAKEDPAPI"
+
+
+@pytest.fixture
+def dpapi(monkeypatch):
+    """Pretend DPAPI is present, with a reversible stand-in for the API."""
+
+    def _protect(data: bytes) -> bytes:
+        return FAKE_MARKER + data[::-1]
+
+    def _unprotect(blob: bytes) -> bytes:
+        if not blob.startswith(FAKE_MARKER):
+            raise sec_mod.SecretError("CryptUnprotectData failed (error 13)")
+        return blob[len(FAKE_MARKER) :][::-1]
+
+    monkeypatch.setattr(sec_mod, "dpapi_available", lambda: True)
+    monkeypatch.setattr(sec_mod, "_protect", _protect)
+    monkeypatch.setattr(sec_mod, "_unprotect", _unprotect)
+    sec_mod._reset_warning_state()
+    yield
+    sec_mod._reset_warning_state()
+
+
+@pytest.fixture
+def no_dpapi(monkeypatch):
+    """Pretend DPAPI is absent (contributor on Linux/macOS)."""
+    monkeypatch.setattr(sec_mod, "dpapi_available", lambda: False)
+    sec_mod._reset_warning_state()
+    yield
+    sec_mod._reset_warning_state()
+
+
+def _foreign_blob() -> str:
+    """Ciphertext this host cannot decrypt (another machine / user account)."""
+    return "dpapi:" + base64.b64encode(b"someone-elses-blob").decode()
+
+
+def _plaintext_v20_config(
+    brave: str = "BSA-brave-plaintext",
+    groq: str = "gsk-groq-plaintext",
+    token: str | None = "trayce-plaintext-token",
+) -> dict:
+    """A pre-encryption config on disk: schema v20 with readable secrets."""
+    data = JarvisConfig().model_dump(mode="json")
+    data["schema_version"] = 20
+    data["research"]["brave_api_key"] = brave
+    data["research"]["groq_api_key"] = groq
+    data["mcp_servers"] = [
+        {
+            "name": "trayce",
+            "url": "http://127.0.0.1:52945/mcp",
+            "enabled": True,
+            "auth_token_from_file": False,
+            "auth_token": token,
+        }
+    ]
+    return data
+
+
+def _write(path: Path, data: dict) -> Path:
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return path
+
+
+# -- migration --------------------------------------------------------------
+
+
+def test_migrate_v20_to_v21_encrypts_plaintext_secrets(dpapi):
+    out = migrate(_plaintext_v20_config())
+    assert out["schema_version"] == CURRENT_SCHEMA_VERSION
+    assert out["research"]["brave_api_key"].startswith("dpapi:")
+    assert out["research"]["groq_api_key"].startswith("dpapi:")
+    assert out["mcp_servers"][0]["auth_token"].startswith("dpapi:")
+    blob = json.dumps(out)
+    assert "BSA-brave-plaintext" not in blob
+    assert "gsk-groq-plaintext" not in blob
+    assert "trayce-plaintext-token" not in blob
+
+
+def test_migrate_v20_to_v21_leaves_empty_and_none_alone(dpapi):
+    out = migrate(_plaintext_v20_config(brave="", groq="", token=None))
+    assert out["research"]["brave_api_key"] == ""
+    assert out["research"]["groq_api_key"] == ""
+    assert out["mcp_servers"][0]["auth_token"] is None
+
+
+def test_migrate_v20_to_v21_is_version_only_without_dpapi(no_dpapi):
+    """Off Windows the migration is a documented no-op beyond the bump."""
+    out = migrate(_plaintext_v20_config())
+    assert out["schema_version"] == CURRENT_SCHEMA_VERSION
+    assert out["research"]["brave_api_key"] == "BSA-brave-plaintext"
+    assert out["mcp_servers"][0]["auth_token"] == "trayce-plaintext-token"
+
+
+def test_migrate_v20_to_v21_leaves_other_fields_readable(dpapi):
+    out = migrate(_plaintext_v20_config())
+    assert out["llm"]["model"] == JarvisConfig().llm.model
+    assert out["mcp_servers"][0]["url"] == "http://127.0.0.1:52945/mcp"
+    assert out["research"]["ultra_planner_model"] == "groq/llama-3.3-70b-versatile"
+
+
+def test_migrate_from_much_older_version_reaches_encryption(dpapi):
+    """The whole chain still runs: a v15 config reaches v21 without the new
+    migration tripping over sections that did not exist yet."""
+    out = migrate({"schema_version": 15, "research": {"api_key": None}})
+    assert out["schema_version"] == CURRENT_SCHEMA_VERSION
+    assert out["research"]["brave_api_key"] == ""
+
+
+# -- save encrypts ----------------------------------------------------------
+
+
+def test_save_config_writes_no_plaintext_secret(tmp_path: Path, dpapi):
+    p = tmp_path / "config.json"
+    c = JarvisConfig()
+    c.research.brave_api_key = "BSA-secret-brave"
+    c.research.groq_api_key = "gsk-secret-groq"
+    c.mcp_servers = [
+        MCPServerConfig(name="trayce", auth_token_from_file=False, auth_token="tok-123")
+    ]
+    save_config(c, p)
+
+    text = p.read_text(encoding="utf-8")
+    assert "BSA-secret-brave" not in text
+    assert "gsk-secret-groq" not in text
+    assert "tok-123" not in text
+    raw = json.loads(text)
+    assert raw["research"]["brave_api_key"].startswith("dpapi:")
+    assert raw["research"]["groq_api_key"].startswith("dpapi:")
+    assert raw["mcp_servers"][0]["auth_token"].startswith("dpapi:")
+
+
+def test_save_config_does_not_mutate_in_memory_config(tmp_path: Path, dpapi):
+    c = JarvisConfig()
+    c.research.brave_api_key = "still-plaintext"
+    save_config(c, tmp_path / "config.json")
+    assert c.research.brave_api_key == "still-plaintext"
+
+
+def test_save_config_keeps_the_rest_of_the_file_readable(tmp_path: Path, dpapi):
+    """Only the secret values are encrypted — config.json stays
+    hand-editable."""
+    p = tmp_path / "config.json"
+    c = JarvisConfig()
+    c.research.brave_api_key = "BSA-secret-brave"
+    c.tts.voice = "en_US-amy-medium"
+    save_config(c, p)
+    text = p.read_text(encoding="utf-8")
+    assert "en_US-amy-medium" in text
+    assert c.llm.model in text
+    assert text.lstrip().startswith("{")
+
+
+def test_save_config_leaves_empty_and_none_secrets_alone(tmp_path: Path, dpapi):
+    p = tmp_path / "config.json"
+    save_config(JarvisConfig(), p)
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    assert raw["research"]["brave_api_key"] == ""
+    assert raw["research"]["groq_api_key"] == ""
+    assert raw["mcp_servers"][0]["auth_token"] is None
+
+
+def test_save_config_never_double_encrypts(tmp_path: Path, dpapi):
+    """Save/load/save must be a fixed point, not a slow wrapping of
+    ciphertext in more ciphertext."""
+    p = tmp_path / "config.json"
+    c = JarvisConfig()
+    c.research.brave_api_key = "BSA-secret-brave"
+    save_config(c, p)
+    first_text = p.read_text(encoding="utf-8")
+    save_config(load_config(p), p)
+    assert p.read_text(encoding="utf-8") == first_text
+    assert load_config(p).research.brave_api_key == "BSA-secret-brave"
+
+
+# -- load decrypts ----------------------------------------------------------
+
+
+def test_load_config_decrypts_secrets(tmp_path: Path, dpapi):
+    p = tmp_path / "config.json"
+    c = JarvisConfig()
+    c.research.brave_api_key = "BSA-secret-brave"
+    c.research.groq_api_key = "gsk-secret-groq"
+    c.mcp_servers = [
+        MCPServerConfig(name="trayce", auth_token_from_file=False, auth_token="tok-123")
+    ]
+    save_config(c, p)
+
+    loaded = load_config(p)
+    assert loaded.research.brave_api_key == "BSA-secret-brave"
+    assert loaded.research.groq_api_key == "gsk-secret-groq"
+    assert loaded.mcp_servers[0].auth_token == "tok-123"
+
+
+def test_load_config_accepts_hand_edited_plaintext_at_current_version(
+    tmp_path: Path, dpapi
+):
+    """A user pasting a key straight into config.json keeps working."""
+    data = _plaintext_v20_config()
+    data["schema_version"] = CURRENT_SCHEMA_VERSION
+    p = _write(tmp_path / "config.json", data)
+    loaded = load_config(p)
+    assert loaded.research.brave_api_key == "BSA-brave-plaintext"
+    assert loaded.mcp_servers[0].auth_token == "trayce-plaintext-token"
+
+
+def test_load_config_tolerates_foreign_ciphertext(tmp_path: Path, dpapi, caplog):
+    """Config copied from another machine or another Windows user account.
+    DPAPI is user-bound, so this is real — it must not crash startup."""
+    data = _plaintext_v20_config()
+    data["schema_version"] = CURRENT_SCHEMA_VERSION
+    data["research"]["brave_api_key"] = _foreign_blob()
+    data["mcp_servers"][0]["auth_token"] = _foreign_blob()
+    p = _write(tmp_path / "config.json", data)
+
+    with caplog.at_level("WARNING"):
+        loaded = load_config(p)
+
+    assert loaded.research.brave_api_key == ""
+    assert loaded.mcp_servers[0].auth_token == ""
+    # Everything else survives, so the user only re-enters the two keys.
+    assert loaded.research.groq_api_key == "gsk-groq-plaintext"
+    assert loaded.llm.model == JarvisConfig().llm.model
+    assert "research.brave_api_key" in caplog.text
+    assert "mcp_servers[trayce].auth_token" in caplog.text
+
+
+def test_load_config_off_windows_never_crashes_on_ciphertext(
+    tmp_path: Path, no_dpapi, caplog
+):
+    """A Windows-written config opened on a contributor's Linux box."""
+    data = _plaintext_v20_config()
+    data["schema_version"] = CURRENT_SCHEMA_VERSION
+    data["research"]["brave_api_key"] = _foreign_blob()
+    p = _write(tmp_path / "config.json", data)
+
+    with caplog.at_level("WARNING"):
+        loaded = load_config(p)
+
+    assert loaded.research.brave_api_key == ""
+    assert loaded.research.groq_api_key == "gsk-groq-plaintext"
+
+
+# -- the full upgrade cycle -------------------------------------------------
+
+
+def test_plaintext_config_load_save_load_cycle_is_stable(tmp_path: Path, dpapi):
+    """The migration path an existing user actually walks: a plaintext v20
+    config on disk, loaded, saved, and loaded again. Keys must survive
+    intact and end up encrypted."""
+    p = _write(tmp_path / "config.json", _plaintext_v20_config())
+
+    first = load_config(p)
+    assert first.research.brave_api_key == "BSA-brave-plaintext"
+    assert first.research.groq_api_key == "gsk-groq-plaintext"
+    assert first.mcp_servers[0].auth_token == "trayce-plaintext-token"
+    assert first.schema_version == CURRENT_SCHEMA_VERSION
+
+    save_config(first, p)
+    text = p.read_text(encoding="utf-8")
+    assert "BSA-brave-plaintext" not in text
+    assert "gsk-groq-plaintext" not in text
+    assert "trayce-plaintext-token" not in text
+
+    second = load_config(p)
+    assert second.research.brave_api_key == "BSA-brave-plaintext"
+    assert second.research.groq_api_key == "gsk-groq-plaintext"
+    assert second.mcp_servers[0].auth_token == "trayce-plaintext-token"
+    assert second.model_dump(mode="json") == first.model_dump(mode="json")
+
+    # A third pass must be a fixed point, not a slow corruption.
+    save_config(second, p)
+    third = load_config(p)
+    assert third.model_dump(mode="json") == second.model_dump(mode="json")
+
+
+def test_plaintext_config_cycle_off_windows(tmp_path: Path, no_dpapi):
+    """Same cycle with no DPAPI: values stay plaintext but are never lost
+    or mangled."""
+    p = _write(tmp_path / "config.json", _plaintext_v20_config())
+
+    first = load_config(p)
+    assert first.research.brave_api_key == "BSA-brave-plaintext"
+    save_config(first, p)
+    second = load_config(p)
+    assert second.research.brave_api_key == "BSA-brave-plaintext"
+    assert second.mcp_servers[0].auth_token == "trayce-plaintext-token"
+
+
+def test_legacy_research_api_key_is_also_encrypted(tmp_path: Path, dpapi):
+    """`research.api_key` is dead code, but it is key-shaped and a user could
+    have pasted into it before it was retired."""
+    p = tmp_path / "config.json"
+    c = JarvisConfig()
+    c.research.api_key = "legacy-key-value"
+    save_config(c, p)
+    assert "legacy-key-value" not in p.read_text(encoding="utf-8")
+    assert load_config(p).research.api_key == "legacy-key-value"
+
+
+def test_legacy_research_api_key_none_stays_none(tmp_path: Path, dpapi):
+    p = tmp_path / "config.json"
+    save_config(JarvisConfig(), p)
+    assert json.loads(p.read_text(encoding="utf-8"))["research"]["api_key"] is None
+    assert load_config(p).research.api_key is None
+
+
+# -- consumers see plaintext ------------------------------------------------
+
+
+def test_consumers_read_plaintext_after_a_settings_style_save(
+    tmp_path: Path, dpapi, monkeypatch
+):
+    """Encryption is a persistence-boundary concern, so the consumers of these
+    fields must be unaffected. Walks the real path: Settings assigns the
+    plaintext key onto the model (ToolsTab._on_research_brave_key), save_config
+    encrypts it, load_config hands plaintext back, and the deep-research runner
+    and MCP client read it off the model.
+
+    Cross-layer imports on purpose — the point of the test is that the layers
+    above config.py did not need changing."""
+    from jarvis.tools.local.deep_research_runner import build_deep_research_config
+    from jarvis.tools.mcp_client import resolve_trayce_endpoint
+
+    monkeypatch.delenv("JARVIS_BRAVE_API_KEY", raising=False)
+    monkeypatch.delenv("JARVIS_GROQ_API_KEY", raising=False)
+
+    p = tmp_path / "config.json"
+    c = load_config(p)
+    c.research.ultra_enabled = True
+    c.research.brave_api_key = "BSA-from-settings"
+    c.research.groq_api_key = "gsk-from-settings"
+    c.mcp_servers = [
+        MCPServerConfig(
+            name="other", url="http://localhost:9000",
+            auth_token_from_file=False, auth_token="tok-from-settings",
+        )
+    ]
+    save_config(c, p)
+
+    reloaded = load_config(p)
+    runtime = build_deep_research_config(
+        research=reloaded.research, main_llm_model="qwen2.5:7b-instruct"
+    )
+    assert runtime.brave_api_key == "BSA-from-settings"
+    assert runtime.groq_api_key == "gsk-from-settings"
+    assert runtime.search_provider == "brave"
+
+    url, token = resolve_trayce_endpoint(reloaded.mcp_servers[0])
+    assert url == "http://localhost:9000"
+    assert token == "tok-from-settings"
+
+
+def test_unreadable_key_reaches_consumers_as_absent_not_as_ciphertext(
+    tmp_path: Path, dpapi
+):
+    """A `dpapi:` string must never leak into an HTTP header or an API call —
+    an undecryptable key has to look exactly like "no key set"."""
+    from jarvis.tools.local.deep_research_runner import build_deep_research_config
+
+    data = _plaintext_v20_config()
+    data["schema_version"] = CURRENT_SCHEMA_VERSION
+    data["research"]["ultra_enabled"] = True
+    data["research"]["brave_api_key"] = _foreign_blob()
+    data["research"]["groq_api_key"] = _foreign_blob()
+    p = _write(tmp_path / "config.json", data)
+
+    runtime = build_deep_research_config(
+        research=load_config(p).research, main_llm_model="qwen2.5:7b-instruct"
+    )
+    assert runtime.brave_api_key is None
+    assert runtime.groq_api_key is None
+    # Falls back to the free pipeline instead of sending garbage to Brave.
+    assert runtime.search_provider == "ddg"

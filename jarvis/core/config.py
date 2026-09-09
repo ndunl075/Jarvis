@@ -10,6 +10,14 @@ Design notes (kept here so future readers see the rationale without digging hist
 - `validate_assignment=True` makes bad UI writes fail at the assignment site
   rather than at next save.
 - Save is atomic: write tmp, replace.
+- Secrets (research API keys, MCP auth tokens) are encrypted at rest with
+  Windows DPAPI. Encryption is a *persistence-boundary* concern: `save_config`
+  encrypts on the way out and `load_config` decrypts on the way in, so the
+  in-memory `JarvisConfig` always holds plaintext and every consumer
+  (Settings UI, deep-research runner, MCP client) is unchanged. See
+  `jarvis/platform/secrets.py` for the storage format and the documented
+  non-Windows plaintext fallback. `_SECRET_FIELD_PATHS` below is the single
+  list of what counts as a secret — add to it, not to individual call sites.
 - Migrations are a chain of v(N) -> v(N+1) functions, applied in sequence.
   Today there is only one schema version, so MIGRATIONS is empty; the comment
   in MIGRATIONS is the template for adding the first real migration.
@@ -33,7 +41,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-CURRENT_SCHEMA_VERSION = 21
+from jarvis.platform.secrets import decrypt_secret, encrypt_secret
+
+CURRENT_SCHEMA_VERSION = 22
 
 # Prompts from prior schema versions — used by migrations to detect and
 # replace the old default without overwriting user-customised prompts.
@@ -419,6 +429,79 @@ class JarvisConfig(_Base):
     mcp_servers: list[MCPServerConfig] = Field(default_factory=_default_mcp_servers)
 
 
+# --- secrets at rest -------------------------------------------------------
+
+# Dotted paths of the fields encrypted in config.json. These operate on the
+# raw JSON dict (not the pydantic model) because encryption happens at the
+# persistence boundary: save writes ciphertext, load hands back plaintext.
+#
+# Deliberately a *narrow* list, not "encrypt everything that looks secret":
+# the rest of config.json must stay human-readable and hand-editable, which
+# is a real usability property of this project. Add a path here when a new
+# secret field lands; do not sprinkle encrypt/decrypt calls at call sites.
+_SECRET_FIELD_PATHS: tuple[tuple[str, str], ...] = (
+    ("research", "brave_api_key"),
+    ("research", "groq_api_key"),
+    # Dead since v16 (nothing reads it) but it is still a key-shaped field
+    # that a user could have pasted into by hand before it was retired, and
+    # it defaults to None, so covering it costs nothing and cannot break a
+    # consumer that does not exist.
+    ("research", "api_key"),
+)
+
+# Secrets inside the mcp_servers list, keyed by field name. Handled
+# separately because the containing structure is a list, not a section.
+_SECRET_MCP_FIELDS: tuple[str, ...] = ("auth_token",)
+
+# Callable[[value, setting_name], value] — encrypt_secret / decrypt_secret.
+_SecretTransform = Callable[[object, str], object]
+
+
+def _walk_secrets(data: dict, transform: _SecretTransform) -> dict:
+    """Apply `transform` to every secret field present in `data`, in place.
+
+    Missing sections and missing keys are skipped rather than created: this
+    runs over configs from every schema version, and materialising a key
+    that the schema does not have yet would trip `extra="forbid"`.
+    """
+    for section, key in _SECRET_FIELD_PATHS:
+        block = data.get(section)
+        if isinstance(block, dict) and key in block:
+            block[key] = transform(block[key], f"{section}.{key}")
+    servers = data.get("mcp_servers")
+    if isinstance(servers, list):
+        for index, server in enumerate(servers):
+            if not isinstance(server, dict):
+                continue
+            label = server.get("name") or index
+            for key in _SECRET_MCP_FIELDS:
+                if key in server:
+                    server[key] = transform(
+                        server[key], f"mcp_servers[{label}].{key}"
+                    )
+    return data
+
+
+def encrypt_secrets(data: dict) -> dict:
+    """Turn a config dict's plaintext secrets into on-disk ciphertext."""
+    return _walk_secrets(
+        data, lambda value, setting: encrypt_secret(value, setting=setting)
+    )
+
+
+def decrypt_secrets(data: dict) -> dict:
+    """Turn a config dict's on-disk secrets back into plaintext.
+
+    Values without the `dpapi:` prefix are legacy plaintext and pass through
+    untouched — that is what keeps pre-v21 configs working. Values that
+    cannot be decrypted (config copied from another machine or user account)
+    come back empty with a warning rather than blowing up startup.
+    """
+    return _walk_secrets(
+        data, lambda value, setting: decrypt_secret(value, setting=setting)
+    )
+
+
 # --- migration -------------------------------------------------------------
 
 Migration = Callable[[dict], dict]
@@ -743,6 +826,29 @@ def _migrate_v19_to_v20(data: dict) -> dict:
     return data
 
 
+def _migrate_v20_to_v21(data: dict) -> dict:
+    """Schema v21: encrypt secrets at rest (Windows DPAPI).
+
+    Up to v20 the research API keys and MCP auth tokens sat in config.json
+    as plaintext with default file permissions. v21 stores them as
+    `dpapi:<base64>` (see jarvis/platform/secrets.py).
+
+    This migration encrypts whatever plaintext the user already has, so the
+    keys stop being readable as soon as the migrated config is written. It
+    is not the only thing keeping old configs working, though —
+    `load_config` decrypts after migrating and `decrypt_secrets` passes
+    un-prefixed values through unchanged, so a config that is *already* at
+    v21 but still holds plaintext (hand-edited, or written on a non-Windows
+    host) keeps working and gets encrypted on its next save.
+
+    Off Windows `encrypt_secrets` is a documented no-op passthrough, so this
+    migration leaves such configs byte-identical apart from the version bump.
+    """
+    encrypt_secrets(data)
+    data["schema_version"] = 21
+    return data
+
+
 def _migrate_v17_to_v18(data: dict) -> dict:
     """Schema v18: privacy reset for migration-stamped weather coordinates.
 
@@ -764,8 +870,8 @@ def _migrate_v17_to_v18(data: dict) -> dict:
     return data
 
 
-def _migrate_v20_to_v21(data: dict) -> dict:
-    """Schema v21: llm.max_tool_iterations for the tool-result feedback loop.
+def _migrate_v21_to_v22(data: dict) -> dict:
+    """Schema v22: llm.max_tool_iterations for the tool-result feedback loop.
 
     Existing configs get the shipping default (3), which switches the
     loop on for them. That IS the intended upgrade: before it the model
@@ -777,7 +883,7 @@ def _migrate_v20_to_v21(data: dict) -> dict:
     """
     llm = data.setdefault("llm", {})
     llm.setdefault("max_tool_iterations", 3)
-    data["schema_version"] = 21
+    data["schema_version"] = 22
     return data
 
 
@@ -802,6 +908,7 @@ MIGRATIONS: dict[int, Migration] = {
     18: _migrate_v18_to_v19,
     19: _migrate_v19_to_v20,
     20: _migrate_v20_to_v21,
+    21: _migrate_v21_to_v22,
 }
 
 
@@ -872,14 +979,24 @@ def load_config(path: Path | None = None) -> JarvisConfig:
             f"config root must be a JSON object, got {type(raw).__name__}"
         )
     raw = migrate(raw)
+    # Decrypt after migrating: migrations reason about the on-disk shape,
+    # and everything downstream of here expects plaintext. Legacy plaintext
+    # values survive this untouched and get encrypted on the next save.
+    raw = decrypt_secrets(raw)
     return JarvisConfig.model_validate(raw)
 
 
 def save_config(config: JarvisConfig, path: Path | None = None) -> None:
-    """Write config atomically (tmp + replace)."""
+    """Write config atomically (tmp + replace).
+
+    Secret fields are encrypted on the way out (see `_SECRET_FIELD_PATHS`);
+    the in-memory `config` is not modified.
+    """
     p = path if path is not None else default_config_path()
     p.parent.mkdir(parents=True, exist_ok=True)
+    # model_dump builds a fresh dict, so mutating it does not touch `config`.
+    data = encrypt_secrets(config.model_dump(mode="json"))
     tmp = p.with_suffix(p.suffix + ".tmp")
     with tmp.open("w", encoding="utf-8") as f:
-        json.dump(config.model_dump(mode="json"), f, indent=2)
+        json.dump(data, f, indent=2)
     tmp.replace(p)
