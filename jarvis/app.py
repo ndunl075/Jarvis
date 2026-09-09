@@ -546,6 +546,11 @@ class JarvisApp:
     research_panel: ResearchPanel
 
     def __init__(self) -> None:
+        # Handler state. _cfg_snapshot is the last config the UI published,
+        # against which _on_config_change diffs the live one.
+        self._cfg_snapshot: dict = {}
+        self._quit_called = False
+
         # Panels that _on_quit and the tray handlers must tolerate being
         # absent: these were the `[None]` cells run() carried for exactly
         # the same reason, and they are read before _build_ui has run.
@@ -819,139 +824,139 @@ class JarvisApp:
         )
         self.audio_loop.close()
 
+    # ------------------------------------------------------------------
+    # Qt main-thread handlers
+    #
+    # Every method in this section runs on the Qt thread, and every one of
+    # them that has to reach the audio stack does so through the bridges
+    # named in the module docstring -- never by calling into it directly.
+    # ------------------------------------------------------------------
+
+    def _on_config_change(self) -> None:
+        new_dict = self.cfg.model_dump(mode="json")
+        old_dict = self._cfg_snapshot
+        changed = _compute_changed_fields(old_dict, new_dict)
+        if not changed:
+            return
+        old_cfg = JarvisConfig.model_validate(old_dict)
+        new_cfg = JarvisConfig.model_validate(new_dict)
+        self._cfg_snapshot = new_dict
+        panel = self.research_panel
+        if panel is not None and "ui.research_panel_width" in changed:
+            panel.set_panel_width(new_cfg.ui.research_panel_width)
+        self.bus.publish(ConfigChanged(old=old_cfg, new=new_cfg, changed_fields=tuple(changed)))
+
+    def _on_test_voice(self, phrase: str) -> None:
+        """Called from the Qt thread; dispatches tts.speak to the audio loop."""
+        try:
+            asyncio.run_coroutine_threadsafe(self.tts.speak(phrase), self.audio_loop)
+        except Exception:
+            log.exception("test-voice dispatch failed")
+
+    def _open_settings(self) -> None:
+        """Create or raise the settings window. Must run on Qt main thread."""
+        if self.settings_window is None:
+            self.settings_window = SettingsWindow(
+                config=self.cfg,
+                on_change=self._on_config_change,
+                voices_dir=self.voices_dir,
+                on_test_voice=self._on_test_voice,
+            )
+        win = self.settings_window
+        win.show()
+        win.raise_()
+        win.activateWindow()
+
+    def _open_settings_any_thread(self) -> None:
+        """Thread-safe entry point for hotkey manager (pynput thread)."""
+        QTimer.singleShot(0, self._open_settings)
+
+    def _on_quit(self) -> None:
+        if self._quit_called:
+            return
+        self._quit_called = True
+
+        # Signal audio loop → triggers cleanup coroutine in audio thread
+        self.audio_loop.call_soon_threadsafe(self.stop_event.set)
+
+        # Block Qt main thread until audio stack drains (tray hidden below
+        # so the user sees Jarvis disappear immediately; the wait is invisible)
+        try:
+            self.tray.hide()
+        except Exception:
+            log.debug("tray.hide() failed during quit", exc_info=True)
+
+        if self.audio_thread.is_alive():
+            self.audio_thread.join(timeout=_AUDIO_SHUTDOWN_TIMEOUT)
+            if self.audio_thread.is_alive():
+                log.warning("audio thread did not stop within %.0f s", _AUDIO_SHUTDOWN_TIMEOUT)
+
+        # Python-level cleanup: unsubscribes, timer stops, etc.
+        self.tray.close()
+        self.orb.close()
+        self.hotkeys.close()
+        self.research_panel.close_panel()
+        if self.deep_research_panel is not None:
+            self.deep_research_panel.close_panel()
+        if self.notes_panel is not None:
+            self.notes_panel.close_panel()
+        if self.dashboard_panel is not None:
+            self.dashboard_panel.close_panel()
+        if self.help_panel is not None:
+            self.help_panel.close_panel()
+        if self.clipboard_panel is not None:
+            self.clipboard_panel.close_panel()
+        if self.log_panel is not None:
+            self.log_panel.close_panel()
+        if self.command_palette is not None:
+            self.command_palette.close_palette()
+        if self.onboarding_panel is not None:
+            self.onboarding_panel.close_panel()
+        if self.settings_window is not None:
+            self.settings_window.close()
+
+        self.qt_app.quit()
+
+    # Mode requests from tray/hotkeys route through the coordinator.
+    # The returned coroutine is awaited on the audio loop by the
+    # caller's run_coroutine_threadsafe wrapper.
+    def _request_mode(self, target: Mode):
+        return self.mode_coord.request(target)
+
+    def _tray_open(self, panel):
+        # The panel is read from its attribute by the caller's lambda, which
+        # is why the tray can be wired to panels that do not exist yet.
+        if panel is not None:
+            panel.open_panel()
+
+    def _tray_open_palette(self):
+        palette = self.command_palette
+        if palette is not None:
+            palette.open_palette()
+
+    # ------------------------------------------------------------------
+    # UI construction
+    # ------------------------------------------------------------------
+
     def _build_ui(self) -> None:
         """Steps 12-14: everything the Qt main thread will own."""
-        _settings_ref: list[SettingsWindow | None] = [None]
-        _cfg_snapshot: list[dict] = [self.cfg.model_dump(mode="json")]
-
-        _research_panel_ref: list = [None]
-        _deep_research_panel_ref: list = [None]
-        _notes_panel_ref: list = [None]
-        _dashboard_panel_ref: list = [None]
-        _help_panel_ref: list = [None]
-        _clipboard_panel_ref: list = [None]
-        _log_panel_ref: list = [None]
-        _command_palette_ref: list = [None]
-        _onboarding_ref: list = [None]
-
-        def _on_config_change() -> None:
-            new_dict = self.cfg.model_dump(mode="json")
-            old_dict = _cfg_snapshot[0]
-            changed = _compute_changed_fields(old_dict, new_dict)
-            if not changed:
-                return
-            old_cfg = JarvisConfig.model_validate(old_dict)
-            new_cfg = JarvisConfig.model_validate(new_dict)
-            _cfg_snapshot[0] = new_dict
-            panel = _research_panel_ref[0]
-            if panel is not None and "ui.research_panel_width" in changed:
-                panel.set_panel_width(new_cfg.ui.research_panel_width)
-            self.bus.publish(ConfigChanged(old=old_cfg, new=new_cfg, changed_fields=tuple(changed)))
-
-        def _on_test_voice(phrase: str) -> None:
-            """Called from the Qt thread; dispatches tts.speak to the audio loop."""
-            try:
-                asyncio.run_coroutine_threadsafe(self.tts.speak(phrase), self.audio_loop)
-            except Exception:
-                log.exception("test-voice dispatch failed")
-
-        def _open_settings() -> None:
-            """Create or raise the settings window. Must run on Qt main thread."""
-            if _settings_ref[0] is None:
-                _settings_ref[0] = SettingsWindow(
-                    config=self.cfg,
-                    on_change=_on_config_change,
-                    voices_dir=self.voices_dir,
-                    on_test_voice=_on_test_voice,
-                )
-            win = _settings_ref[0]
-            win.show()
-            win.raise_()
-            win.activateWindow()
-
-        def _open_settings_any_thread() -> None:
-            """Thread-safe entry point for hotkey manager (pynput thread)."""
-            QTimer.singleShot(0, _open_settings)
-
-        _quit_called = [False]
-
-        def _on_quit() -> None:
-            if _quit_called[0]:
-                return
-            _quit_called[0] = True
-
-            # Signal audio loop → triggers cleanup coroutine in audio thread
-            self.audio_loop.call_soon_threadsafe(self.stop_event.set)
-
-            # Block Qt main thread until audio stack drains (tray hidden below
-            # so the user sees Jarvis disappear immediately; the wait is invisible)
-            try:
-                self.tray.hide()
-            except Exception:
-                log.debug("tray.hide() failed during quit", exc_info=True)
-
-            if self.audio_thread.is_alive():
-                self.audio_thread.join(timeout=_AUDIO_SHUTDOWN_TIMEOUT)
-                if self.audio_thread.is_alive():
-                    log.warning("audio thread did not stop within %.0f s", _AUDIO_SHUTDOWN_TIMEOUT)
-
-            # Python-level cleanup: unsubscribes, timer stops, etc.
-            self.tray.close()
-            self.orb.close()
-            self.hotkeys.close()
-            self.research_panel.close_panel()
-            if _deep_research_panel_ref[0] is not None:
-                _deep_research_panel_ref[0].close_panel()
-            if _notes_panel_ref[0] is not None:
-                _notes_panel_ref[0].close_panel()
-            if _dashboard_panel_ref[0] is not None:
-                _dashboard_panel_ref[0].close_panel()
-            if _help_panel_ref[0] is not None:
-                _help_panel_ref[0].close_panel()
-            if _clipboard_panel_ref[0] is not None:
-                _clipboard_panel_ref[0].close_panel()
-            if _log_panel_ref[0] is not None:
-                _log_panel_ref[0].close_panel()
-            if _command_palette_ref[0] is not None:
-                _command_palette_ref[0].close_palette()
-            if _onboarding_ref[0] is not None:
-                _onboarding_ref[0].close_panel()
-            if _settings_ref[0] is not None:
-                _settings_ref[0].close()
-
-            self.qt_app.quit()
-
-        # Mode requests from tray/hotkeys route through the coordinator.
-        # The returned coroutine is awaited on the audio loop by the
-        # caller's run_coroutine_threadsafe wrapper.
-        def _request_mode(target: Mode):
-            return self.mode_coord.request(target)
-
-        def _tray_open(ref_list):
-            panel = ref_list[0]
-            if panel is not None:
-                panel.open_panel()
-
-        def _tray_open_palette():
-            palette = _command_palette_ref[0]
-            if palette is not None:
-                palette.open_palette()
+        self._cfg_snapshot = self.cfg.model_dump(mode="json")
 
         self.tray = TrayIcon(
             sm=self.sm,
             bus=self.bus,
             audio_loop=self.audio_loop,
             hotkeys=self.cfg.hotkeys,
-            on_open_settings=_open_settings,
-            on_quit=_on_quit,
-            on_mode_request=_request_mode,
-            on_open_dashboard=lambda: _tray_open(_dashboard_panel_ref),
-            on_open_notes=lambda: _tray_open(_notes_panel_ref),
-            on_open_help=lambda: _tray_open(_help_panel_ref),
-            on_open_clipboard_history=lambda: _tray_open(_clipboard_panel_ref),
-            on_open_logs=lambda: _tray_open(_log_panel_ref),
-            on_open_command_palette=_tray_open_palette,
-            on_open_tutorial=lambda: _tray_open(_onboarding_ref),
+            on_open_settings=self._open_settings,
+            on_quit=self._on_quit,
+            on_mode_request=self._request_mode,
+            on_open_dashboard=lambda: self._tray_open(self.dashboard_panel),
+            on_open_notes=lambda: self._tray_open(self.notes_panel),
+            on_open_help=lambda: self._tray_open(self.help_panel),
+            on_open_clipboard_history=lambda: self._tray_open(self.clipboard_panel),
+            on_open_logs=lambda: self._tray_open(self.log_panel),
+            on_open_command_palette=self._tray_open_palette,
+            on_open_tutorial=lambda: self._tray_open(self.onboarding_panel),
         )
         self.tray.show()
 
@@ -962,14 +967,13 @@ class JarvisApp:
         def _on_research_panel_width(width: int) -> None:
             if self.cfg.ui.research_panel_width != width:
                 self.cfg.ui.research_panel_width = width
-                _on_config_change()
+                self._on_config_change()
 
         self.research_panel = ResearchPanel(
             panel_width=self.cfg.ui.research_panel_width,
             on_width_changed=_on_research_panel_width,
             ollama_model=self.cfg.llm.model,
         )
-        _research_panel_ref[0] = self.research_panel
 
         from jarvis.tools.local.research import (
             CloseResearchTool,
@@ -1016,7 +1020,6 @@ class JarvisApp:
         self.deep_research_panel = DeepResearchPanel(
             config_provider=_deep_research_config_provider,
         )
-        _deep_research_panel_ref[0] = self.deep_research_panel
 
         from jarvis.tools.local.deep_research_tools import (
             CloseDeepResearchTool,
@@ -1061,7 +1064,6 @@ class JarvisApp:
 
         # --- Notes panel + voice tools ---------------------------------------
         self.notes_panel = NotesPanel()
-        _notes_panel_ref[0] = self.notes_panel
 
         from jarvis.tools.local.notes_tools import (
             AppendToNoteTool,
@@ -1110,7 +1112,6 @@ class JarvisApp:
             deep_research_count_provider=_dr_counts,
             notes_count_provider=_notes_count,
         )
-        _dashboard_panel_ref[0] = self.dashboard_panel
 
         from jarvis.tools.local.dashboard_tools import (
             CloseDashboardTool,
@@ -1122,7 +1123,6 @@ class JarvisApp:
 
         # --- Help panel + voice tools ----------------------------------------
         self.help_panel = HelpPanel()
-        _help_panel_ref[0] = self.help_panel
 
         from jarvis.tools.local.help_tools import OpenHelpTool
 
@@ -1130,7 +1130,6 @@ class JarvisApp:
 
         # --- Clipboard history panel + voice tools ---------------------------
         self.clipboard_panel = ClipboardHistoryPanel()
-        _clipboard_panel_ref[0] = self.clipboard_panel
 
         from jarvis.tools.local.clipboard_history_tools import (
             ClearClipboardHistoryTool,
@@ -1154,7 +1153,6 @@ class JarvisApp:
 
         # --- Live log viewer panel + voice tools -----------------------------
         self.log_panel = LogPanel()
-        _log_panel_ref[0] = self.log_panel
 
         from jarvis.tools.local.log_tools import CloseLogsTool, ShowLogsTool
 
@@ -1184,14 +1182,13 @@ class JarvisApp:
                 log.exception("could not schedule palette text onto audio loop")
 
         self.command_palette = CommandPalette(submit_text=_submit_palette_text)
-        _command_palette_ref[0] = self.command_palette
 
         # --- Onboarding panel (auto-shown on first run) ----------------------
         def _on_onboarding_finished() -> None:
             if not self.cfg.general.first_run_completed:
                 self.cfg.general.first_run_completed = True
                 try:
-                    _on_config_change()
+                    self._on_config_change()
                 except Exception:
                     log.exception("config persist failed after onboarding finish")
 
@@ -1202,7 +1199,6 @@ class JarvisApp:
             on_open_help=self.help_panel.open_panel,
             on_open_command_palette=self.command_palette.open_palette,
         )
-        _onboarding_ref[0] = self.onboarding_panel
 
         if not self.cfg.general.first_run_completed:
             # Defer to next Qt tick so the rest of the UI exists first.
@@ -1213,8 +1209,8 @@ class JarvisApp:
             bus=self.bus,
             audio_loop=self.audio_loop,
             hotkeys=self.cfg.hotkeys,
-            on_mode_request=_request_mode,
-            on_open_settings=_open_settings_any_thread,
+            on_mode_request=self._request_mode,
+            on_open_settings=self._open_settings_any_thread,
             on_open_command_palette=lambda: QTimer.singleShot(
                 0, self.command_palette.open_palette
             ),
