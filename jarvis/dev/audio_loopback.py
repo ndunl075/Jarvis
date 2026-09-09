@@ -371,6 +371,7 @@ async def main() -> int:
         llm=ollama,
         conversation=conversation,
         registry=registry,
+        max_tool_iterations=cfg.llm.max_tool_iterations,
     )
 
     # Lifecycle. Order: source first (mic ready), then audio ML models,

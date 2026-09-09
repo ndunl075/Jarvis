@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from jarvis.llm.conversation import Conversation, _filter_turns_for_llm
+from jarvis.llm.conversation import (
+    Conversation,
+    ToolExchange,
+    _filter_turns_for_llm,
+)
 
 # --- helpers ---
 
@@ -328,7 +332,10 @@ def test_maybe_clear_configurable_threshold():
 # --- _filter_turns_for_llm ---
 
 
-def test_filter_removes_tool_role_messages():
+def test_filter_removes_tool_role_messages_with_no_parent_call_id():
+    """Tool messages that cannot be paired with an assistant tool_calls
+    entry are dropped — the chat API rejects that shape. Well-formed
+    pairs are kept; see the tool round-trip section below."""
     turns = [
         {"role": "user", "content": "what's the weather?"},
         {"role": "assistant", "tool_calls": [{"name": "get_weather"}]},
@@ -448,3 +455,275 @@ def test_current_messages_filters_orphaned_user_then_new_user():
     assert "new question" in contents
 
 
+
+
+# --- tool round trips (the feedback loop) ----------------------------
+
+
+def _exchange(call_id: str = "call_1", name: str = "weather",
+              result: str = "4 degrees") -> ToolExchange:
+    return ToolExchange(call_id=call_id, name=name, result=result)
+
+
+def test_add_tool_round_trip_writes_the_protocol_shape():
+    c = Conversation(system_prompt_provider=_provider("sys"))
+    c.add_user_turn("what's the weather?")
+    msgs = c.add_tool_round_trip(
+        content="",
+        exchanges=[ToolExchange("call_1", "weather", {"unit": "c"}, "4 degrees")],
+    )
+    assert msgs == [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "what's the weather?"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "weather", "arguments": {"unit": "c"}},
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "name": "weather",
+            "content": "4 degrees",
+        },
+    ]
+
+
+def test_add_tool_round_trip_keeps_narration_on_the_assistant_message():
+    c = Conversation(system_prompt_provider=_provider("sys"))
+    c.add_user_turn("weather?")
+    msgs = c.add_tool_round_trip(
+        content="Checking, sir. ", exchanges=[_exchange()]
+    )
+    assistant = next(m for m in msgs if m.get("tool_calls"))
+    assert assistant["content"] == "Checking, sir. "
+
+
+def test_add_tool_round_trip_one_tool_message_per_exchange():
+    c = Conversation(system_prompt_provider=_provider("sys"))
+    c.add_user_turn("two things")
+    msgs = c.add_tool_round_trip(
+        content="",
+        exchanges=[
+            _exchange("call_1", "alpha", "A"),
+            _exchange("call_2", "beta", "B"),
+        ],
+    )
+    tools = [m for m in msgs if m["role"] == "tool"]
+    assert [(m["tool_call_id"], m["content"]) for m in tools] == [
+        ("call_1", "A"),
+        ("call_2", "B"),
+    ]
+
+
+def test_add_tool_round_trip_resets_the_inactivity_timer():
+    """A slow tool must not let the NEXT user turn look like a stale
+    session and wipe the round trip the model is about to read."""
+    clock = _Clock()
+    c = Conversation(
+        system_prompt_provider=_provider("sys"),
+        inactivity_timeout_seconds=100.0,
+        time_provider=clock,
+    )
+    c.add_user_turn("weather?")
+    clock.advance(90.0)  # a very slow tool
+    c.add_tool_round_trip(content="", exchanges=[_exchange()])
+    clock.advance(90.0)
+    c.add_user_turn("and tomorrow?")
+    contents = [m.get("content") for m in c.current_messages()]
+    assert "4 degrees" in contents
+
+
+def test_round_trip_survives_into_current_messages():
+    """The whole point: what the tool returned reaches the model."""
+    c = Conversation(system_prompt_provider=_provider("sys"))
+    c.add_user_turn("weather?")
+    c.add_tool_round_trip(content="", exchanges=[_exchange()])
+    c.add_assistant_turn("It's 4 degrees, sir.")
+    c.add_user_turn("and tomorrow?")
+    msgs = c.current_messages()
+    assert [m["role"] for m in msgs] == [
+        "system", "user", "assistant", "tool", "assistant", "user",
+    ]
+
+
+# --- trimming must never orphan a tool message -----------------------
+
+
+def test_trim_drops_tool_messages_along_with_their_assistant_parent():
+    """max_turns is small enough that the cut lands on the assistant
+    message carrying the tool_calls. Its results must go with it — a
+    role:"tool" message with no parent tool_call_id is rejected by
+    Ollama and the OpenAI-compatible APIs alike."""
+    c = Conversation(system_prompt_provider=_provider("sys"), max_turns=3)
+    c.add_user_turn("weather?")
+    c.add_tool_round_trip(
+        content="",
+        exchanges=[_exchange("call_1", "weather", "4 degrees")],
+    )
+    # 3 turns stored: user, assistant(tool_calls), tool.
+    c.add_assistant_turn("It's 4 degrees, sir.")
+    # Trimming to 3 leaves [assistant(tool_calls), tool, assistant]; one
+    # more turn pushes the cut onto the assistant tool_calls message.
+    c.add_user_turn("and tomorrow?")
+
+    stored = c._turns
+    assert not any(m.get("role") == "tool" for m in stored), stored
+    assert len(stored) <= 3
+
+
+def test_trim_keeps_a_round_trip_whole_when_it_survives():
+    c = Conversation(system_prompt_provider=_provider("sys"), max_turns=3)
+    c.add_user_turn("weather?")
+    c.add_tool_round_trip(
+        content="",
+        exchanges=[_exchange("call_1", "weather", "4 degrees")],
+    )
+    stored = c._turns
+    assert [m["role"] for m in stored] == ["user", "assistant", "tool"]
+    assert stored[2]["tool_call_id"] == stored[1]["tool_calls"][0]["id"]
+
+
+def test_trim_never_leaves_an_orphan_for_any_max_turns():
+    """Property check across every cut position: after any sequence of
+    adds, each stored tool message has an assistant message ahead of it
+    declaring its id."""
+    for max_turns in range(1, 9):
+        c = Conversation(
+            system_prompt_provider=_provider("sys"), max_turns=max_turns
+        )
+        c.add_user_turn("weather?")
+        c.add_tool_round_trip(
+            content="",
+            exchanges=[
+                ToolExchange("call_1", "weather", {}, "4 degrees"),
+                ToolExchange("call_2", "clock", {}, "9pm"),
+            ],
+        )
+        c.add_assistant_turn("Cold and late, sir.")
+        c.add_user_turn("thanks")
+        for i, msg in enumerate(c._turns):
+            if msg.get("role") != "tool":
+                continue
+            declared = {
+                call["id"]
+                for m in c._turns[:i]
+                for call in (m.get("tool_calls") or [])
+            }
+            assert msg["tool_call_id"] in declared, (
+                f"orphaned tool message at max_turns={max_turns}: {c._turns}"
+            )
+
+
+def test_filter_drops_a_tool_message_orphaned_by_a_hand_built_history():
+    turns = [
+        {"role": "tool", "tool_call_id": "call_1", "content": "4 degrees"},
+        {"role": "user", "content": "weather?"},
+    ]
+    filtered = _filter_turns_for_llm(turns)
+    assert all(m["role"] != "tool" for m in filtered)
+
+
+def test_filter_drops_an_assistant_tool_call_whose_result_never_arrived():
+    """The mid-flight state a cancelled turn would leave if the two
+    halves were ever written separately."""
+    turns = [
+        {"role": "user", "content": "weather?"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {"id": "call_1", "type": "function",
+                 "function": {"name": "weather", "arguments": {}}}
+            ],
+        },
+    ]
+    filtered = _filter_turns_for_llm(turns)
+    assert filtered == [{"role": "user", "content": "weather?"}]
+
+
+def test_filter_drops_tool_calls_when_only_some_results_arrived():
+    """Partial results are as rejectable as none: every declared id
+    needs an answer."""
+    turns = [
+        {"role": "user", "content": "two things"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {"id": "call_1", "type": "function",
+                 "function": {"name": "alpha", "arguments": {}}},
+                {"id": "call_2", "type": "function",
+                 "function": {"name": "beta", "arguments": {}}},
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_1", "content": "A"},
+    ]
+    filtered = _filter_turns_for_llm(turns)
+    assert [m["role"] for m in filtered] == ["user"]
+
+
+def test_filter_keeps_narration_when_dropping_an_unanswered_tool_call():
+    turns = [
+        {"role": "user", "content": "weather?"},
+        {
+            "role": "assistant",
+            "content": "Checking, sir.",
+            "tool_calls": [
+                {"id": "call_1", "type": "function",
+                 "function": {"name": "weather", "arguments": {}}}
+            ],
+        },
+    ]
+    filtered = _filter_turns_for_llm(turns)
+    assistant = next(m for m in filtered if m["role"] == "assistant")
+    assert assistant == {"role": "assistant", "content": "Checking, sir."}
+
+
+def test_filter_keeps_a_well_formed_round_trip_intact():
+    turns = [
+        {"role": "user", "content": "weather?"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {"id": "call_1", "type": "function",
+                 "function": {"name": "weather", "arguments": {}}}
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_1", "content": "4 degrees"},
+        {"role": "assistant", "content": "It's 4 degrees, sir."},
+    ]
+    assert _filter_turns_for_llm(turns) == turns
+
+
+def test_filter_pairs_results_only_with_a_preceding_assistant_message():
+    """A tool message sitting BEFORE the assistant that declares its id
+    is not a round trip, whatever the ids say."""
+    turns = [
+        {"role": "tool", "tool_call_id": "call_1", "content": "early"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {"id": "call_1", "type": "function",
+                 "function": {"name": "weather", "arguments": {}}}
+            ],
+        },
+    ]
+    filtered = _filter_turns_for_llm(turns)
+    assert filtered == []
+
+
+def test_clear_wipes_tool_round_trips_too():
+    c = Conversation(system_prompt_provider=_provider("sys"))
+    c.add_user_turn("weather?")
+    c.add_tool_round_trip(content="", exchanges=[_exchange()])
+    c.clear()
+    assert c.current_messages() == [{"role": "system", "content": "sys"}]

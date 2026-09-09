@@ -9,11 +9,49 @@ Two layers
    spotify" should never wait for a 7B-parameter model.
 
 2. LLM layer. The transcription is added to the conversation history,
-   OllamaClient.stream_chat() is invoked, and each Ollama chunk's
-   content becomes a SpeakIntent yielded immediately (no buffering).
-   Tool calls are emitted as ToolIntents (currently arrive batched on
-   the final chunk; defensive accumulation point ready if Ollama later
-   streams them).
+   OllamaClient.stream_chat() is invoked, and the model's text is
+   buffered for the duration of one round (see "Double-speaking"
+   below). Tool calls arrive batched on the final chunk; the
+   accumulation point below is defensive against Ollama later
+   streaming them per-chunk.
+
+Tool-result feedback loop
+-------------------------
+The standard OpenAI/Ollama round trip, so the model can act on what a
+tool returned instead of dispatching blind:
+
+  1. Model returns tool_calls.
+  2. The router executes them through the registry.
+  3. Conversation records ONE assistant message carrying those
+     tool_calls plus one role:"tool" message per call, correlated by
+     tool_call_id (Conversation.add_tool_round_trip).
+  4. The model is re-invoked with that history.
+  5. Repeat until it returns no tool calls, bounded by
+     max_tool_iterations (default 3 -- latency on a local 7B is the
+     binding constraint, not correctness).
+
+Hitting the bound is not an error path that hangs or loops: the final
+round's tool results are spoken directly, so the user always hears
+something.
+
+The loop needs a registry (you cannot observe a result you cannot
+execute). Without one -- or with max_tool_iterations == 1 -- the
+router falls back to the legacy one-shot behaviour: yield ToolIntents
+and let the caller execute and speak them. That fallback is also the
+config escape hatch for anyone who prefers a tool's own polished
+output over the model's paraphrase of it.
+
+Double-speaking
+---------------
+Text is buffered for the whole of each round rather than yielded per
+chunk, because tool calls arrive last: speaking narration as it
+streams and only then discovering a tool call would produce
+"Opening Chrome..." followed by the tool's own "Opening Chrome". So a
+round that ends in tool calls speaks nothing -- neither the narration
+nor the raw tool result -- and the model's next round, which has seen
+the results, is the single utterance the user hears. Only the
+bound-exhausted path speaks a raw tool result, and only because there
+is no further model round to summarise it.
 
 Streaming contract with the pipeline
 ------------------------------------
@@ -32,6 +70,13 @@ ollama_client.stream_chat() into the httpx stream's context manager
 (verified by ollama_client tests). add_assistant_turn() is outside any
 try/except, so a cancelled stream simply never reaches it -- partial
 assistant text never enters conversation history.
+
+The feedback loop preserves that property by construction. Every await
+inside a round -- the stream, and each registry.execute() -- happens
+BEFORE anything is written to history; the assistant tool_calls
+message and its role:"tool" results are appended together in one
+synchronous call with no await between them, so a cancel can land
+before the round trip or after it, never inside it.
 
 Deliberate tradeoffs (documented at point of choice)
 ----------------------------------------------------
@@ -57,17 +102,33 @@ import datetime
 import json
 import logging
 import re
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import quote_plus
 
+from jarvis.llm.conversation import ToolExchange
+
 if TYPE_CHECKING:
     from jarvis.llm.conversation import Conversation
     from jarvis.llm.ollama_client import OllamaClient
-    from jarvis.tools.registry import ToolRegistry
+    from jarvis.tools.registry import ToolRegistry, ToolResult
 
 log = logging.getLogger(__name__)
+
+# Maximum LLM invocations per user turn. 3 buys the two-step
+# interactions that matter ("check the weather, then act on it") while
+# capping worst-case latency on a local 7B at three inferences. 1
+# disables the feedback loop entirely and restores one-shot dispatch.
+DEFAULT_MAX_TOOL_ITERATIONS = 3
+
+# Cap on a single tool result fed back to the model. A directory
+# listing or a web fetch can be tens of KB; a 7B's context is small and
+# every extra token is latency on the NEXT inference too. Truncation is
+# announced in-band so the model knows it is seeing a prefix rather
+# than silently reasoning over half a listing.
+MAX_TOOL_RESULT_CHARS = 4000
+_TRUNCATION_NOTE = "\n... (result truncated)"
 
 
 # --- Intent types ----------------------------------------------------
@@ -490,10 +551,14 @@ class IntentRouter:
         tools: list[dict] | None = None,
         registry: ToolRegistry | None = None,
         time_provider: Callable[[], datetime.datetime] = datetime.datetime.now,
+        max_tool_iterations: int = DEFAULT_MAX_TOOL_ITERATIONS,
     ) -> None:
         # `registry` is the live source of the tool schemas — querying it
         # fresh on every route() call means a settings-driven enable/disable
         # takes effect on the very next turn (no rebuild of the router).
+        # It is ALSO the executor for the tool-result feedback loop; a
+        # router without one cannot observe results and so degrades to
+        # one-shot dispatch (yield ToolIntents, caller executes).
         # `tools` is the legacy static-list path retained for the existing
         # test suite and any caller that wants to inject a curated schema
         # set; if both are provided, registry wins.
@@ -502,61 +567,170 @@ class IntentRouter:
         self._registry = registry
         self._static_tools = tools or []
         self._patterns = _build_patterns(time_provider)
+        self._max_tool_iterations = max(1, int(max_tool_iterations))
+        # Ollama does not attach ids to the tool calls it emits, so the
+        # router mints them. Monotonic over the router's lifetime rather
+        # than per-turn: conversation history outlives a turn, and two
+        # round trips sharing "call_1" would let the trimming/orphan
+        # filter pair a tool result with the wrong assistant message.
+        self._tool_call_seq = 0
 
     def _current_tools(self) -> list[dict]:
         if self._registry is not None:
             return self._registry.as_openai_functions()
         return self._static_tools
 
-    async def route(self, transcription: str) -> AsyncIterator[Intent]:
+    def _feedback_enabled(self) -> bool:
+        """True when the router can run the tool-result loop itself."""
+        return self._registry is not None and self._max_tool_iterations > 1
+
+    def _next_call_id(self) -> str:
+        self._tool_call_seq += 1
+        return f"call_{self._tool_call_seq}"
+
+    async def route(self, transcription: str) -> AsyncGenerator[Intent, None]:
         """Route a transcription into a stream of Intents.
 
-        Pattern matches yield exactly one Intent and return. LLM responses
-        yield SpeakIntents per content chunk and ToolIntents per
-        function call (currently batched on the final Ollama chunk)."""
+        Typed as AsyncGenerator rather than AsyncIterator (it satisfies
+        IntentProducer either way) so callers can aclose() it
+        explicitly. A consumer cancelled mid-turn leaves this generator
+        suspended inside stream_chat or a tool; closing it promptly is
+        cheaper and more predictable than waiting for the GC.
+
+        Pattern matches yield exactly one Intent and return — no LLM
+        call, no added latency, unchanged by the feedback loop.
+
+        LLM responses run the tool-result loop: up to
+        max_tool_iterations model invocations, executing tool calls and
+        feeding their results back between rounds. The Intents yielded
+        are the SpeakIntents of whichever round finally answered
+        without calling a tool. When the loop is disabled (no registry,
+        or max_tool_iterations == 1) tool calls are yielded as
+        ToolIntents for the caller to execute instead."""
         pattern_intent = self._try_pattern(transcription)
         if pattern_intent is not None:
             yield pattern_intent
             return
 
-        # LLM path. Buffer text until the stream ends — if the model also
-        # emitted tool calls, speak only the tool result (once), not the
-        # narration + tool confirmation ("Opening Chrome…" twice).
         messages = self._conv.add_user_turn(transcription)
-        full_text_parts: list[str] = []
-        tool_calls_seen: list[dict] = []
-        async for chunk in self._llm.stream_chat(messages, tools=self._current_tools()):
+        for iteration in range(1, self._max_tool_iterations + 1):
+            text_parts, raw_tool_calls = await self._stream_round(messages)
+
+            if not raw_tool_calls:
+                # The model answered in prose. This is the only path
+                # that speaks model text, and the only one that records
+                # a plain assistant turn.
+                for part in text_parts:
+                    if part:
+                        yield SpeakIntent(text=part)
+                full_text = "".join(text_parts)
+                if full_text:
+                    self._conv.add_assistant_turn(full_text)
+                return
+
+            intents = self._tool_intents_from(raw_tool_calls, transcription)
+            if not intents:
+                # The model tried to call tools but every call was
+                # malformed. Narration is still suppressed (it was
+                # written to accompany an action that never happened)
+                # and no assistant turn is recorded.
+                return
+
+            if not self._feedback_enabled():
+                # Legacy one-shot dispatch: the caller executes and
+                # speaks. Nothing is stored — the tool result never
+                # passes through this method, which is what kept it out
+                # of history before the loop existed.
+                for intent in intents:
+                    yield intent
+                return
+
+            # Execute first, record second. Every await lives in
+            # _run_tools, so a cancel lands before the round trip is
+            # written rather than halfway through it.
+            exchanges, spoken = await self._run_tools(intents)
+            messages = self._conv.add_tool_round_trip(
+                content="".join(text_parts), exchanges=exchanges
+            )
+
+            if iteration >= self._max_tool_iterations:
+                # Bound reached. Degrade by speaking the results we
+                # already have rather than burning another inference or
+                # going silent. The results are in history as role:"tool"
+                # messages, so they are NOT also stored as assistant
+                # text — that duplicate is exactly the shape that used
+                # to make the model re-fire tools on follow-ups.
+                log.warning(
+                    "[router] tool feedback loop hit the %d-iteration "
+                    "bound for %r; speaking raw tool output",
+                    self._max_tool_iterations,
+                    transcription,
+                )
+                if spoken:
+                    yield SpeakIntent(text=spoken)
+                return
+
+    # -- internal --
+
+    async def _stream_round(
+        self, messages: list[dict]
+    ) -> tuple[list[str], list[dict]]:
+        """One LLM invocation. Returns (content chunks, raw tool calls).
+
+        Text is accumulated rather than yielded because tool calls
+        arrive on the final chunk — see the module's "Double-speaking"
+        note. Chunk granularity is preserved in the returned list so
+        the caller can hand PiperTTS the same token-sized pieces it
+        would have got streaming.
+
+        CancelledError propagates out untouched: no try/except here,
+        and the caller has written nothing to history yet."""
+        text_parts: list[str] = []
+        tool_calls: list[dict] = []
+        async for chunk in self._llm.stream_chat(
+            messages, tools=self._current_tools()
+        ):
             if chunk.content:
-                full_text_parts.append(chunk.content)
+                text_parts.append(chunk.content)
             if chunk.tool_calls:
                 # Per current Ollama behavior, tool_calls arrive complete
                 # on the final chunk. Defensive accumulation here is the
                 # hook point for future per-chunk streaming -- if Ollama
                 # adopts incremental tool-call emission, partial-call
                 # assembly logic plugs in around this list.
-                tool_calls_seen.extend(chunk.tool_calls)
+                tool_calls.extend(chunk.tool_calls)
             if chunk.done:
                 break
+        return text_parts, tool_calls
 
+    def _tool_intents_from(
+        self, raw_tool_calls: list[dict], transcription: str
+    ) -> list[ToolIntent]:
+        """Parse, log and de-duplicate one round's tool calls."""
         # Visibility for live tool-decision debugging: every LLM-chosen
         # tool gets printed alongside the transcription that prompted it.
         # The pattern path doesn't show up here — those are router-level
         # decisions, not LLM ones. print (not log.info) keeps the trace
         # visible without bumping the global level, matching the rest of
         # the [router] / [boot] diagnostics.
-        for tc in tool_calls_seen:
+        for tc in raw_tool_calls:
             fn = tc.get("function") or {}
             tool_name = fn.get("name") or "<missing>"
             print(
                 f"[router] llm-chose-tool={tool_name} for={transcription!r}"
             )
-        if len(tool_calls_seen) > 1:
+        if len(raw_tool_calls) > 1:
             log.info(
                 "[router] ToolIntent count=%d in one response",
-                len(tool_calls_seen),
+                len(raw_tool_calls),
             )
+        # De-duplication is per response, not across iterations: a model
+        # that legitimately re-reads a file after writing it must be
+        # allowed to. Cross-iteration repetition is what the iteration
+        # bound is for.
         seen_tool_keys: set[str] = set()
-        for tc in tool_calls_seen:
+        intents: list[ToolIntent] = []
+        for tc in raw_tool_calls:
             intent = self._tool_intent_from(tc)
             if intent is None:
                 continue
@@ -571,33 +745,38 @@ class IntentRouter:
                 )
                 continue
             seen_tool_keys.add(key)
-            yield intent
+            intents.append(intent)
+        return intents
 
-        if not tool_calls_seen:
-            for part in full_text_parts:
-                if part:
-                    yield SpeakIntent(text=part)
+    async def _run_tools(
+        self, intents: list[ToolIntent]
+    ) -> tuple[list[ToolExchange], str]:
+        """Execute each ToolIntent; return the exchanges to record and
+        the spoken form of the results (used only if the loop then hits
+        its iteration bound).
 
-        # Only LLM-GENERATED text (chunk.content from the model) gets
-        # stored as an assistant turn. Tool result strings — which are
-        # produced downstream by execute_intent in the producer adapter
-        # and spoken to the user — never reach this method and never
-        # land in conversation history. That separation is the explicit
-        # fix for: "tool result strings stored as assistant turns cause
-        # the LLM to repeat the same tool on unrelated follow-ups."
-        #
-        # Mixed case (LLM narration + tool call in the same response):
-        # store the narration portion only. The router never sees the
-        # tool result string here, so this guard alone keeps tool output
-        # out of history.
-        #
-        # CancelledError raised from inside the for loop above skips
-        # this line entirely, so partial assistant text never pollutes
-        # history either.
-        if full_text_parts and not tool_calls_seen:
-            self._conv.add_assistant_turn("".join(full_text_parts))
-
-    # -- internal --
+        Writes nothing to conversation history — the caller appends the
+        whole round trip atomically once every tool has finished, so a
+        cancel mid-execution leaves history exactly as it was.
+        registry.execute() never raises for tool-level failures (it
+        returns ToolResult(success=False)), but does re-raise
+        CancelledError, which is the behaviour this relies on."""
+        registry = self._registry
+        assert registry is not None  # guarded by _feedback_enabled()
+        exchanges: list[ToolExchange] = []
+        spoken: list[str] = []
+        for intent in intents:
+            result = await registry.execute(intent.tool_name, intent.args)
+            exchanges.append(
+                ToolExchange(
+                    call_id=self._next_call_id(),
+                    name=intent.tool_name,
+                    arguments=intent.args,
+                    result=_result_for_model(result),
+                )
+            )
+            spoken.append(_result_for_speech(result))
+        return exchanges, "".join(spoken)
 
     def _try_pattern(self, transcription: str) -> Intent | None:
         normalized = _normalize(transcription)
@@ -705,6 +884,48 @@ def _ensure_sentence_terminator(text: str) -> str:
     if stripped[-1] in _SENTENCE_TERMINATORS:
         return stripped + " "
     return stripped + ". "
+
+
+def _result_for_model(result: ToolResult) -> str:
+    """Stringify a ToolResult for the role:"tool" message the model reads.
+
+    Deliberately NOT the same rendering as the spoken path. Speech
+    collapses a dict result to "Done, sir." because a listener cannot
+    consume structured data; the model can, and that structure is the
+    whole point of "list my Downloads folder and tell me which one is
+    the invoice" — so dicts are serialised as JSON rather than dropped.
+
+    Failures are surfaced verbatim too. A model told "Error: unknown
+    tool 'weathr'" can pick a different tool on the next iteration; one
+    told nothing just calls the same broken tool again."""
+    if not result.success:
+        text = f"Error: {result.error or 'the tool failed'}"
+    elif result.output is None:
+        text = "Success (no output)."
+    elif isinstance(result.output, str):
+        text = result.output or "Success (no output)."
+    else:
+        try:
+            text = json.dumps(result.output, default=str)
+        except (TypeError, ValueError):
+            text = str(result.output)
+    if len(text) > MAX_TOOL_RESULT_CHARS:
+        return text[:MAX_TOOL_RESULT_CHARS] + _TRUNCATION_NOTE
+    return text
+
+
+def _result_for_speech(result: ToolResult) -> str:
+    """Spoken rendering of a ToolResult, matching execute_intent's
+    ToolIntent branch. Used only on the bound-exhausted path, where
+    there is no further model round to summarise the result."""
+    if not result.success:
+        return _ensure_sentence_terminator(result.error or _GENERIC_FAIL)
+    if isinstance(result.output, str) and result.output:
+        return _ensure_sentence_terminator(result.output)
+    # Terminated (unlike execute_intent's bare _GENERIC_OK) because the
+    # bound-exhausted path may concatenate several results into one
+    # SpeakIntent and PiperTTS segments on sentence boundaries.
+    return _ensure_sentence_terminator(_GENERIC_OK)
 
 
 async def execute_intent(
