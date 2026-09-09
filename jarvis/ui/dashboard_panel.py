@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
+from typing import TYPE_CHECKING, cast
 
 from PySide6.QtCore import (
     QEasingCurve,
@@ -27,6 +28,10 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+if TYPE_CHECKING:
+    from jarvis.core.config import JarvisConfig
+    from jarvis.ui.overlay import AmplitudeLatch
 
 log = logging.getLogger(__name__)
 
@@ -127,8 +132,14 @@ class DashboardPanel(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
 
         self._sm = sm
-        self._amplitude_latch = amplitude_latch
-        self._config_provider = config_provider
+        # The constructor is duck-typed on purpose — tests hand it stand-ins
+        # and the UI does not import the audio or config layer at runtime.
+        # The two collaborators the refresh timers actually call methods on
+        # are recorded under their real types so those calls stay checked.
+        self._amplitude_latch = cast("AmplitudeLatch | None", amplitude_latch)
+        self._config_provider = cast(
+            "Callable[[], JarvisConfig] | None", config_provider
+        )
         self._deep_research_count_provider = deep_research_count_provider
         self._notes_count_provider = notes_count_provider
 
@@ -531,7 +542,9 @@ def _foreground_window_title() -> str:
     try:
         import ctypes
 
-        user32 = ctypes.windll.user32
+        # ctypes.windll exists only in the Windows build of ctypes; the
+        # whole body is inside a try/except that returns "" off Windows.
+        user32 = ctypes.windll.user32  # type: ignore[reportAttributeAccessIssue]
         hwnd = user32.GetForegroundWindow()
         if not hwnd:
             return ""

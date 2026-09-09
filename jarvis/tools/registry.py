@@ -66,7 +66,7 @@ import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import ClassVar, Protocol, runtime_checkable
+from typing import Any, ClassVar, Protocol, TypeVar, runtime_checkable
 
 from pydantic import BaseModel, ValidationError
 
@@ -100,21 +100,49 @@ class ToolResult:
     error: str | None = None
 
 
+# Contravariant because `execute` only ever *consumes* its argument: a
+# tool that accepts any BaseModel is usable everywhere a tool accepting a
+# narrower model is expected, not the other way round.
+ArgsT_contra = TypeVar("ArgsT_contra", bound=BaseModel, contravariant=True)
+
+
 @runtime_checkable
-class Tool(Protocol):
+class Tool(Protocol[ArgsT_contra]):
     """The contract every callable tool — local or MCP-adapted — must
     satisfy.
 
     Protocol (not ABC) so MCP wrappers fulfil it structurally without
     inheriting our base. @runtime_checkable lets registry / tests do
-    isinstance(x, Tool) for protocol-conformance smoke tests."""
+    isinstance(x, Tool) for protocol-conformance smoke tests.
+
+    Two of the members are shaped by what the registry does with them
+    rather than by what reads most naturally here:
+
+    - `args_schema` is a read-only property, not a mutable attribute. A
+      mutable protocol attribute is invariant, which would reject every
+      tool in the tree: they all declare their own model
+      (``args_schema = OpenUrlArgs``), and ``type[OpenUrlArgs]`` is not
+      the same type as ``type[BaseModel]``. Nothing assigns through the
+      protocol — registry.execute() only reads it — so read-only is the
+      accurate declaration, and it makes the member covariant.
+
+    - `execute` is generic in its argument. Implementations narrow the
+      parameter to their own model, which is unsound in general but is
+      exactly the invariant ToolRegistry.execute() enforces: it
+      validates the raw args through *that tool's* `args_schema` and
+      hands the result straight to `execute`, so a tool can only ever
+      be called with an instance of its own model. Parameterising the
+      protocol states that link; the registry holds ``Tool[Any]``
+      because a flat namespace of tools is heterogeneous by nature."""
 
     name: str
     description: str
-    args_schema: type[BaseModel]
     requires_confirmation: bool
 
-    async def execute(self, args: BaseModel) -> ToolResult: ...
+    @property
+    def args_schema(self) -> type[BaseModel]: ...
+
+    async def execute(self, args: ArgsT_contra) -> ToolResult: ...
 
 
 # --- confirmation (the requires_confirmation gate) --------------------
@@ -159,7 +187,7 @@ class ToolConfirmer(Protocol):
     async def confirm(self, request: ConfirmationRequest) -> bool: ...
 
 
-def _confirmation_summary(tool: Tool, args: BaseModel) -> str:
+def _confirmation_summary(tool: Tool[Any], args: BaseModel) -> str:
     """The sentence shown to the user for `tool`.
 
     The optional confirmation_summary(args) hook wins; a tool that does
@@ -279,12 +307,12 @@ class ToolRegistry:
         confirmer: ToolConfirmer | None = None,
     ) -> None:
         self._tools_config = tools_config
-        self._tools: dict[str, Tool] = {}
+        self._tools: dict[str, Tool[Any]] = {}
         self._confirmer = confirmer
 
     # -- registration -------------------------------------------------
 
-    def register(self, tool: Tool) -> None:
+    def register(self, tool: Tool[Any]) -> None:
         """Add a tool. Raises ToolNameCollisionError if `tool.name` is taken.
         See module docstring on the no-silent-overwrite policy."""
         if tool.name in self._tools:
@@ -298,7 +326,7 @@ class ToolRegistry:
     def unregister(self, name: str) -> None:
         self._tools.pop(name, None)
 
-    def get(self, name: str) -> Tool | None:
+    def get(self, name: str) -> Tool[Any] | None:
         return self._tools.get(name)
 
     # -- confirmation -------------------------------------------------
@@ -318,7 +346,7 @@ class ToolRegistry:
         window is never one a spoken command can land in."""
         self._confirmer = confirmer
 
-    async def _confirm(self, name: str, tool: Tool, args: BaseModel) -> str | None:
+    async def _confirm(self, name: str, tool: Tool[Any], args: BaseModel) -> str | None:
         """Ask the user to approve `name`.
 
         Returns None on approval, or the reason for the refusal — which
@@ -368,7 +396,7 @@ class ToolRegistry:
         # Config convention (ToolsConfig.enabled): absence == enabled.
         return self._tools_config.enabled.get(name, True)
 
-    def list_enabled(self) -> list[Tool]:
+    def list_enabled(self) -> list[Tool[Any]]:
         return [t for n, t in self._tools.items() if self._is_enabled(n)]
 
     def as_openai_functions(self) -> list[dict]:

@@ -13,6 +13,9 @@ catalogue of local tool classes — which drives the router's voice-pattern
 table and the Settings -> Tools list — is jarvis/tools/catalogue.py.
 """
 
+from collections.abc import Callable
+from typing import Any, cast
+
 from jarvis.tools.mcp_client import MCPManager, MCPServerConnection, MCPTool
 from jarvis.tools.registry import (
     PRIORITY_CATCH_ALL,
@@ -71,12 +74,21 @@ def setup_local_tools(
         from jarvis.core.config import WeatherConfig
         weather_cfg = WeatherConfig()
 
-    weather_save_fn = None
+    # Declared separately from the closure below: binding the name to
+    # None first and then to a `def` of the same name gives the name two
+    # incompatible declared types. The closure keeps its own reference to
+    # the config so the narrowing survives into the call.
+    weather_save_fn: Callable[[], None] | None = None
     if config is not None:
+        from jarvis.core.config import JarvisConfig
         from jarvis.core.config import save_config as _save_cfg
 
-        def weather_save_fn() -> None:
-            _save_cfg(config)  # type: ignore[arg-type]
+        saved_config = config
+
+        def weather_save_fn_impl() -> None:
+            _save_cfg(cast(JarvisConfig, saved_config))
+
+        weather_save_fn = weather_save_fn_impl
 
     from jarvis.core.config import WorkspaceConfig
 
@@ -90,7 +102,7 @@ def setup_local_tools(
         from jarvis.core.config import VisionConfig
         vision_cfg = VisionConfig()
 
-    base_tools: list[object] = [
+    base_tools: list[Tool[Any]] = [
         ClipboardTool(),
         CloseAppTool(),
         ListDirectoryTool(),
@@ -114,7 +126,7 @@ def setup_local_tools(
             SeeScreenTool(ollama_client=ollama_client, vision_config=vision_cfg)
         )
     for tool in base_tools:
-        registry.register(tool)  # type: ignore[arg-type]
+        registry.register(tool)
 
 
 __all__ = [

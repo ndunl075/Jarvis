@@ -957,7 +957,10 @@ def migrate(data: dict) -> dict:
                 f"migration {version} -> {version + 1} produced "
                 f"schema_version={new_version!r}"
             )
-        version = new_version
+        # Past that check new_version *is* version + 1, so step the counter
+        # rather than reading an untyped value back out of the dict — a
+        # migration cannot smuggle a non-int version through the loop.
+        version += 1
     return data
 
 

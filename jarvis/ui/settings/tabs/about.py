@@ -37,11 +37,17 @@ _FALLBACK_VERSION = "0.0.1"
 
 
 def _detect_version() -> str:
+    # The import is guarded separately from the lookup on purpose: if it
+    # were to fail, evaluating PackageNotFoundError in a combined except
+    # clause would raise NameError over the top of the ImportError and
+    # defeat the fallback this function exists to provide.
     try:
         from importlib.metadata import PackageNotFoundError, version
-
+    except ImportError:
+        return _FALLBACK_VERSION
+    try:
         return version("jarvis")
-    except (PackageNotFoundError, ImportError, OSError):
+    except (PackageNotFoundError, OSError):
         return _FALLBACK_VERSION
 
 
