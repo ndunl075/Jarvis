@@ -11,6 +11,7 @@ event loop. The point of the class is that it no longer has to.
 
 Covered:
   - _on_quit: the ordered shutdown sequence, and that it stays ordered
+  - _on_quit: the tool confirmer is closed FIRST, before the audio join
   - _on_quit: stop_event is signalled through the loop, never called direct
   - _on_quit: idempotence, and that a failing tray.hide() does not abort it
   - _on_config_change: diffing, snapshot advance, ConfigChanged publish
@@ -60,6 +61,8 @@ def _quittable_app(order: list[str] | None = None, *, with_panels: bool = True) 
             return None
         return lambda *a, **k: order.append(name)
 
+    app.confirmer = MagicMock()
+    app.confirmer.close = MagicMock(side_effect=rec("confirmer_close"))
     app.audio_loop = MagicMock()
     app.audio_loop.call_soon_threadsafe = MagicMock(side_effect=rec("stop_event_signalled"))
     app.stop_event = MagicMock()
@@ -108,6 +111,7 @@ def test_on_quit_runs_the_documented_shutdown_order():
     app._on_quit()
 
     assert order == [
+        "confirmer_close",
         "stop_event_signalled",
         "tray_hide",
         "thread_join",
@@ -172,9 +176,105 @@ def test_on_quit_survives_a_failing_tray_hide():
 
     app._on_quit()
 
-    assert order[0] == "stop_event_signalled"
+    # confirmer_close now precedes it; the point stands — signalling the
+    # audio loop happens before the join, whatever the tray did.
+    assert order.index("stop_event_signalled") < order.index("thread_join")
     assert "thread_join" in order
     assert order[-1] == "qt_quit"
+
+
+def test_on_quit_closes_the_confirmer_before_signalling_the_audio_loop():
+    """Shutdown-during-prompt, at the composition root.
+
+    An open confirmation dialog parks a coroutine on the audio loop
+    waiting for a verdict. If _on_quit signalled the loop and joined the
+    thread while that prompt was still up, the join would sit there until
+    the prompt's own watchdog expired. Closing the confirmer first denies
+    the prompt and releases the coroutine before shutdown even begins, so
+    the join has nothing to wait for.
+    """
+    order: list[str] = []
+    app = _quittable_app(order)
+
+    app._on_quit()
+
+    assert order.index("confirmer_close") < order.index("stop_event_signalled")
+    assert order.index("confirmer_close") < order.index("thread_join")
+
+
+def test_on_quit_tolerates_a_confirmer_that_was_never_built():
+    """The tray-unavailable exit and every partial boot leave it None."""
+    app = _quittable_app()
+    app.confirmer = None
+
+    app._on_quit()
+
+    app.qt_app.quit.assert_called_once()
+
+
+def test_on_quit_survives_a_failing_confirmer_close():
+    """A confirmer that raises on the way out must not strand the app
+    with a live tray icon and no window."""
+    order: list[str] = []
+    app = _quittable_app(order)
+    app.confirmer.close = MagicMock(side_effect=RuntimeError("boom"))
+
+    app._on_quit()
+
+    assert order[0] == "stop_event_signalled"
+    app.qt_app.quit.assert_called_once()
+
+
+def test_build_confirmer_installs_it_on_the_registry():
+    """Step 9b. The registry fails closed without one, so the only thing
+    standing between a confirmable tool and a spurious refusal is this
+    call happening — and happening before the audio thread starts."""
+    app = JarvisApp()
+    app.registry = MagicMock()
+
+    with patch("jarvis.app.QtToolConfirmer") as ctor:
+        app._build_confirmer()
+
+    ctor.assert_called_once_with()
+    assert app.confirmer is ctor.return_value
+    app.registry.set_confirmer.assert_called_once_with(ctor.return_value)
+
+
+def test_start_builds_the_confirmer_before_booting_the_audio_stack():
+    """Ordering, asserted rather than commented.
+
+    The audio thread is the thing that can execute a tool. If the
+    confirmer were built with the rest of the Qt UI (step 12), there
+    would be a live window in which a spoken "type ..." was refused for
+    the wrong reason — no confirmer, rather than no approval.
+    """
+    order: list[str] = []
+    app = JarvisApp()
+
+    def rec(name, ret=None):
+        def _f(*a, **k):
+            order.append(name)
+            return ret
+        return _f
+
+    with (
+        patch.object(JarvisApp, "_load_config", rec("load_config")),
+        patch.object(JarvisApp, "_build_audio_stack", rec("build_audio_stack")),
+        patch.object(JarvisApp, "_create_qt_app", rec("create_qt_app")),
+        patch.object(JarvisApp, "_build_confirmer", rec("build_confirmer")),
+        patch.object(JarvisApp, "_boot_audio_stack", rec("boot_audio_stack")),
+        patch.object(JarvisApp, "_build_ui", rec("build_ui")),
+        patch("jarvis.app.ensure_system_tray_available", return_value=True),
+        patch("jarvis.app._wire_event_logging"),
+    ):
+        app.bus = MagicMock()
+        app.qt_app = MagicMock()
+        app.qt_app.exec.return_value = 0
+        assert app.start() == 0
+
+    assert order.index("create_qt_app") < order.index("build_confirmer")
+    assert order.index("build_confirmer") < order.index("boot_audio_stack")
+    assert order.index("build_confirmer") < order.index("build_ui")
 
 
 def test_on_quit_tolerates_panels_that_were_never_built():

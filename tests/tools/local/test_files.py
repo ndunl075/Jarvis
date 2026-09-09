@@ -3,8 +3,8 @@
 Read-only by design — there are no write/delete/move tests because there
 are no such operations. If a future PR adds them, this test file should
 guard their destructive nature with explicit tmp_path containment plus
-requires_confirmation=True checks (see registry.py header on deferred
-UX)."""
+requires_confirmation=True checks — the gate those would ride on is
+wired now (see registry.py header and jarvis/ui/tool_confirm.py)."""
 
 from __future__ import annotations
 

@@ -487,6 +487,64 @@ async def test_reload_reconnects_on_url_change(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_server_confirmation_flag_reaches_every_adapted_tool(monkeypatch):
+    """Remote tools are confirmable, per server.
+
+    The server picks its own tool names and writes the descriptions the
+    model reads, so a per-tool opt-in would be consent given to a string
+    the remote end controls. The server — the thing the user actually
+    added — is the unit."""
+    session = _FakeSession(tools=[_FakeTool("a"), _FakeTool("b")])
+    _install_fake_mcp(monkeypatch, session=session)
+    reg = _registry()
+    mgr = MCPManager(reg)
+
+    await mgr.add_server(MCPServerConfig(
+        name="srv", url="http://x/mcp", requires_confirmation=True,
+    ))
+
+    assert reg.get("srv_a").requires_confirmation is True
+    assert reg.get("srv_b").requires_confirmation is True
+
+
+@pytest.mark.asyncio
+async def test_server_confirmation_defaults_off(monkeypatch):
+    """Existing configs keep working, and a localhost bridge the user
+    deliberately added does not start prompting on every call."""
+    session = _FakeSession(tools=[_FakeTool("a")])
+    _install_fake_mcp(monkeypatch, session=session)
+    reg = _registry()
+    mgr = MCPManager(reg)
+
+    await mgr.add_server(MCPServerConfig(name="srv", url="http://x/mcp"))
+
+    assert reg.get("srv_a").requires_confirmation is False
+
+
+@pytest.mark.asyncio
+async def test_reload_reconnects_when_confirmation_setting_changes(monkeypatch):
+    """The flag is baked into each MCPTool at registration, so toggling
+    it in Settings only takes effect if the server re-registers — same
+    reason a changed endpoint forces a reconnect."""
+    session = _FakeSession(tools=[_FakeTool("a")])
+    _install_fake_mcp(monkeypatch, session=session)
+    reg = _registry()
+    mgr = MCPManager(reg)
+    await mgr.reload_from_config([
+        MCPServerConfig(name="srv", url="http://a/mcp", enabled=True,
+                        auth_token_from_file=False),
+    ])
+    assert reg.get("srv_a").requires_confirmation is False
+
+    await mgr.reload_from_config([
+        MCPServerConfig(name="srv", url="http://a/mcp", enabled=True,
+                        auth_token_from_file=False,
+                        requires_confirmation=True),
+    ])
+    assert reg.get("srv_a").requires_confirmation is True
+
+
+@pytest.mark.asyncio
 async def test_shutdown_disconnects_all(monkeypatch):
     session = _FakeSession(tools=[_FakeTool("a")])
     _install_fake_mcp(monkeypatch, session=session)

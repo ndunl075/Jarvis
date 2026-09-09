@@ -267,6 +267,20 @@ class MCPServerConfig(_Base):
     # Trayce convention). When False, `auth_token` below is used verbatim.
     auth_token_from_file: bool = True
     auth_token: str | None = None
+    # Gate every tool this server publishes behind the confirmation
+    # prompt (see jarvis/tools/registry.py). Per SERVER and not per tool
+    # because the tool list is the server's to define: it can add,
+    # rename and re-describe tools between two connections, so a
+    # per-tool opt-in would be consent given to a name the operator of
+    # the server controls. The server is the thing the user actually
+    # chose to trust, so the server is the unit the setting attaches to.
+    #
+    # Default False so existing configs keep working unchanged, and
+    # because the honest default for a locally-run, user-added server
+    # (Trayce, a filesystem bridge) is the one that does not prompt on
+    # every call. Users pointing Jarvis at anything less local should
+    # turn it on — Settings -> Tools has the checkbox.
+    requires_confirmation: bool = False
 
 
 def _default_mcp_servers() -> list[MCPServerConfig]:

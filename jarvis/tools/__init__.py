@@ -2,6 +2,7 @@
 
 Public surface:
   - Tool, ToolResult, EmptyArgs:            protocol + return type
+  - ConfirmationRequest, ToolConfirmer:    the requires_confirmation gate
   - VoicePattern, VoiceRoutable:           optional voice-routing extension
   - ToolRegistry, ToolNameCollisionError:  registry + collision exception
   - TOOL_NAME_REGEX:                       shared name-validity regex
@@ -17,8 +18,10 @@ from jarvis.tools.registry import (
     PRIORITY_CATCH_ALL,
     PRIORITY_DEFAULT,
     TOOL_NAME_REGEX,
+    ConfirmationRequest,
     EmptyArgs,
     Tool,
+    ToolConfirmer,
     ToolNameCollisionError,
     ToolRegistry,
     ToolResult,
@@ -118,11 +121,13 @@ __all__ = [
     "PRIORITY_CATCH_ALL",
     "PRIORITY_DEFAULT",
     "TOOL_NAME_REGEX",
+    "ConfirmationRequest",
     "EmptyArgs",
     "MCPManager",
     "MCPServerConnection",
     "MCPTool",
     "Tool",
+    "ToolConfirmer",
     "ToolNameCollisionError",
     "ToolRegistry",
     "ToolResult",

@@ -18,15 +18,25 @@ Cross-thread bridges
   Qt → audio:     asyncio.run_coroutine_threadsafe (mode changes, quit signal)
   audio → Qt:     QMetaObject.invokeMethod / QueuedConnection (bus subscribers)
   TTS → OverlayOrb: AmplitudeLatch (lock-free float under the GIL)
+  tool confirmation: both directions at once — the audio loop posts the
+     prompt to Qt (invokeMethod/QueuedConnection) and awaits an
+     asyncio.Future that the Qt thread resolves (call_soon_threadsafe).
+     See jarvis/ui/tool_confirm.py; the confirmer is built at step 9b,
+     before the audio thread starts, so no tool that requires
+     confirmation can ever be dispatched without one being present.
 
 Shutdown
 --------
 JarvisApp._on_quit() (Qt thread):
-  1. Signal stop_event on audio loop (call_soon_threadsafe).
-  2. Join audio thread with 10 s timeout (audio thread cancels TTS,
+  1. Close the tool confirmer: any open prompt is denied and any audio-
+     thread await of a verdict resolves immediately. FIRST, and before
+     the audio loop is signalled, so step 3's join never waits on a
+     dialog nobody is left to answer.
+  2. Signal stop_event on audio loop (call_soon_threadsafe).
+  3. Join audio thread with 10 s timeout (audio thread cancels TTS,
      stops pipeline, unloads modules, closes loop).
-  3. Close tray, orb, hotkeys, settings (unsubscribes + hides).
-  4. qt_app.quit() → exec() returns.
+  4. Close tray, orb, hotkeys, settings (unsubscribes + hides).
+  5. qt_app.quit() → exec() returns.
 """
 
 from __future__ import annotations
@@ -84,6 +94,7 @@ from jarvis.ui.onboarding_panel import OnboardingPanel
 from jarvis.ui.overlay import AmplitudeLatch, OverlayOrb, make_amplitude_callback
 from jarvis.ui.research_panel import ResearchPanel
 from jarvis.ui.settings import SettingsWindow
+from jarvis.ui.tool_confirm import QtToolConfirmer
 from jarvis.ui.tray import TrayIcon, ensure_system_tray_available
 
 log = logging.getLogger(__name__)
@@ -566,6 +577,13 @@ class JarvisApp:
         self.onboarding_panel: OnboardingPanel | None = None
         self.settings_window: SettingsWindow | None = None
 
+        # The tool-confirmation prompt (Qt main thread). Optional for the
+        # same reason as the panels above: _on_quit closes it and must
+        # tolerate a JarvisApp that never got as far as building it. A
+        # None confirmer is not a hole — ToolRegistry fails closed and
+        # refuses any tool that asks for confirmation.
+        self.confirmer: QtToolConfirmer | None = None
+
     # ------------------------------------------------------------------
     # Build phases
     # ------------------------------------------------------------------
@@ -589,6 +607,11 @@ class JarvisApp:
         # 9. Qt application (created before audio boot so dialogs work)
         # ------------------------------------------------------------------
         self._create_qt_app()
+
+        # ------------------------------------------------------------------
+        # 9b. Tool-confirmation prompt (needs Qt; must precede audio boot)
+        # ------------------------------------------------------------------
+        self._build_confirmer()
 
         # ------------------------------------------------------------------
         # 10. System tray availability check
@@ -752,6 +775,24 @@ class JarvisApp:
     def _create_qt_app(self) -> None:
         self.qt_app = QApplication.instance() or QApplication(sys.argv)
 
+    def _build_confirmer(self) -> None:
+        """Step 9b: install the approval UI for confirmable tools.
+
+        Placed between the QApplication (which the dialog needs) and the
+        audio boot (which is the first moment a tool could run) on
+        purpose. Doing it in _build_ui with the other Qt objects would
+        leave a window — audio thread up, pipeline listening, UI not
+        built yet — in which a confirmable tool would be refused for the
+        wrong reason. The registry fails closed either way; this just
+        keeps it from failing closed on a legitimate request.
+
+        Nothing about the confirmer touches the audio stack: the audio
+        thread reaches it only by awaiting confirm(), which posts to Qt
+        and waits for an answer. See jarvis/ui/tool_confirm.py.
+        """
+        self.confirmer = QtToolConfirmer()
+        self.registry.set_confirmer(self.confirmer)
+
     def _boot_audio_stack(self) -> int | None:
         """Step 8: start the audio thread and wait for it to report ready.
 
@@ -877,6 +918,16 @@ class JarvisApp:
         if self._quit_called:
             return
         self._quit_called = True
+
+        # Before anything else: deny any confirmation prompt that is open
+        # and unblock any audio-thread coroutine awaiting a verdict. An
+        # unanswered prompt would otherwise sit inside the join below,
+        # holding a tool call open on a UI that is about to disappear.
+        if self.confirmer is not None:
+            try:
+                self.confirmer.close()
+            except Exception:
+                log.debug("confirmer.close() failed during quit", exc_info=True)
 
         # Signal audio loop → triggers cleanup coroutine in audio thread
         self.audio_loop.call_soon_threadsafe(self.stop_event.set)

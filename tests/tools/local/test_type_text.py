@@ -58,5 +58,20 @@ def test_interval_bounds_enforced_by_schema():
         TypeIntoActiveWindowArgs(text="hi", interval_seconds=1.0)
 
 
-def test_requires_confirmation_false():
-    assert TypeIntoActiveWindowTool().requires_confirmation is False
+def test_requires_confirmation_true():
+    """The one built-in tool behind the confirmation gate.
+
+    It synthesises keystrokes into whatever window has focus, which the
+    LLM cannot see. Flipping this back to False silently removes the
+    only thing standing between a misheard sentence and a terminal."""
+    assert TypeIntoActiveWindowTool().requires_confirmation is True
+
+
+def test_confirmation_summary_says_what_and_where():
+    """The prompt has to answer "what is about to happen", and the
+    model-facing description does not."""
+    summary = TypeIntoActiveWindowTool().confirmation_summary(
+        TypeIntoActiveWindowArgs(text="rm -rf /")
+    )
+    assert "8 character(s)" in summary
+    assert "keyboard focus" in summary

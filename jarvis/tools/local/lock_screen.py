@@ -18,10 +18,22 @@ class LockScreenTool:
         "asks to lock the screen or PC."
     )
     args_schema: type[BaseModel] = EmptyArgs
-    # NOTE: this is the closest thing to a destructive action in the Phase
-    # 4 set — interrupts whatever the user is doing — but it is reversible
-    # by signing back in. requires_confirmation stays False until Phase 6+
-    # wires hotkey-based cancellation (see registry.py header).
+    # NOTE: re-decided when the confirmation gate landed, rather than
+    # inherited. The gate exists now, so "stays False until the UX is
+    # wired" is no longer a reason for anything; this tool is ungated
+    # because it does not qualify.
+    #
+    # Locking is disruptive but it is not destructive: nothing is lost,
+    # nothing leaves the machine, and signing back in undoes all of it
+    # in seconds. It is also the one action here whose failure mode is
+    # *safe* — a spurious lock leaves the workstation more secure, not
+    # less, which is the opposite of type_into_active_window's.
+    #
+    # And it is reached by an exact voice pattern ("lock the screen"),
+    # so the misfire risk the gate is for — the model inventing a call
+    # from an ambiguous transcription — is largely bypassed. Gating it
+    # would put a modal dialog in front of the deliberate, correct,
+    # common path in exchange for softening a two-second annoyance.
     requires_confirmation: bool = False
     voice_patterns: ClassVar[tuple[VoicePattern, ...]] = (
         VoicePattern(

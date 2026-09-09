@@ -162,7 +162,17 @@ def _sanitize_tool_name(server_name: str, tool_name: str) -> str:
 
 
 class MCPTool:
-    """Adapts one remote MCP tool to Jarvis's Tool protocol."""
+    """Adapts one remote MCP tool to Jarvis's Tool protocol.
+
+    `requires_confirmation` is a class-level False that each instance
+    overrides from its server's config. Remote tools are worth gating on
+    principle — the server is user-configured, its `description` reaches
+    the model verbatim, and neither the name nor the behaviour behind it
+    is anything this codebase reviewed — but gating all of them by
+    default would put a modal dialog in front of every call to a
+    localhost bridge the user deliberately added, which is how a safety
+    prompt becomes a thing people click through without reading. So the
+    decision is the user's, per server, and it defaults to off."""
 
     requires_confirmation: bool = False
 
@@ -174,10 +184,12 @@ class MCPTool:
         args_schema: type[BaseModel],
         connection: MCPServerConnection,
         remote_name: str,
+        requires_confirmation: bool = False,
     ) -> None:
         self.name = name
         self.description = description
         self.args_schema = args_schema
+        self.requires_confirmation = requires_confirmation
         self._connection = connection
         # The unprefixed name the server knows this tool by.
         self._remote_name = remote_name
@@ -207,9 +219,20 @@ class ToolSpec(BaseModel):
 class MCPServerConnection:
     """Owns one MCP server's transport + session for the session lifetime."""
 
-    def __init__(self, name: str, url: str, auth_token: str | None) -> None:
+    def __init__(
+        self,
+        name: str,
+        url: str,
+        auth_token: str | None,
+        *,
+        requires_confirmation: bool = False,
+    ) -> None:
         self.name = name
         self.url = url
+        # Kept on the connection as well as on each tool so
+        # reload_from_config can notice the setting changing and
+        # re-register the server's tools with the new value.
+        self.requires_confirmation = requires_confirmation
         self._auth_token = auth_token
         self._session: Any = None
         self._exit_stack: Any = None
@@ -358,7 +381,12 @@ class MCPManager:
                 "Trayce auth token not found — is Trayce signed in? "
                 "Connecting to %s without auth.", url,
             )
-        conn = MCPServerConnection(config.name, url, token)
+        conn = MCPServerConnection(
+            config.name,
+            url,
+            token,
+            requires_confirmation=config.requires_confirmation,
+        )
         try:
             specs = await conn.connect()
         except MCPUnavailableError as e:
@@ -389,6 +417,7 @@ class MCPManager:
                 ),
                 connection=conn,
                 remote_name=spec.name,
+                requires_confirmation=config.requires_confirmation,
             )
             try:
                 self._registry.register(tool)
@@ -418,8 +447,11 @@ class MCPManager:
 
         - Remove servers that are gone or now disabled.
         - Add servers that are newly present and enabled.
-        - For servers whose URL/auth changed, remove+re-add so the new
-          endpoint takes effect."""
+        - For servers whose URL/auth or confirmation setting changed,
+          remove+re-add so the new value takes effect. The confirmation
+          flag is baked into each registered MCPTool at add_server time,
+          so flipping it in Settings has to go through a re-register the
+          same way a changed endpoint does."""
         desired: dict[str, MCPServerConfig] = {
             c.name: c for c in configs if c.enabled
         }
@@ -430,10 +462,13 @@ class MCPManager:
             if cfg is None:
                 await self.remove_server(name)
                 continue
-            # Endpoint changed -> reconnect.
+            # Endpoint or confirmation setting changed -> reconnect.
             conn = self._connections[name]
             new_url, _ = resolve_trayce_endpoint(cfg)
-            if new_url != conn.url:
+            if (
+                new_url != conn.url
+                or cfg.requires_confirmation != conn.requires_confirmation
+            ):
                 await self.remove_server(name)
 
         # Add anything desired but not connected.

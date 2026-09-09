@@ -367,6 +367,11 @@ async def main() -> int:
     # Tool registry: registered first so the IntentRouter sees the full
     # set at construction; the router queries it fresh per route() call,
     # so config edits while running take effect on the next turn.
+    # No confirmer is wired: this harness has no Qt UI to raise a dialog
+    # on. The registry fails closed, so any tool with
+    # requires_confirmation=True is refused here rather than run
+    # unguarded — deliberate, and the reason the flag defaults to a
+    # refusal rather than a pass.
     registry = ToolRegistry(cfg.tools)
     setup_local_tools(registry)
     tool_names = sorted(t.name for t in registry.list_enabled())

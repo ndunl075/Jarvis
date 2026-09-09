@@ -69,6 +69,38 @@ loses settings.
 
 ### Security
 
+- Tool calls can now require explicit approval, and `type_into_active_window`
+  does. `Tool.requires_confirmation` has existed in the protocol since Phase 4
+  with nothing reading it; it is now enforced at `ToolRegistry.execute()`, the
+  single point every tool call passes through. A tool that asks for
+  confirmation does not run until the user clicks Approve in a modal dialog
+  (`jarvis/ui/tool_confirm.py`) showing the tool name, a plain-language summary
+  and the exact arguments. The prompt **default-denies**: on an 8-second
+  timeout, on Escape, and on close. A denial comes back as an ordinary
+  `ToolResult(success=False, error=...)`, so Jarvis says so and the model can
+  choose differently.
+
+  `type_into_active_window` is the tool this exists for — it synthesises
+  arbitrary keystrokes into whatever window holds focus, which may be a
+  terminal, an address bar or a password field, and neither the model nor the
+  user can see which at the moment of execution. `lock_screen` was reviewed and
+  deliberately left ungated: it is reversible by signing back in, and a
+  spurious lock leaves the machine more secure rather than less.
+
+  The gate **fails closed**. With no confirmation UI wired — a headless run,
+  the dev loopback harness, the test suite — a tool that asks for confirmation
+  is refused rather than run unguarded.
+
+  The original design deferred this to "Phase 6+ when barge-in lands", because
+  both candidate UXes needed the audio path. A dialog does not: the audio
+  thread posts the prompt to the Qt main thread and awaits the verdict, so
+  nothing about it touches STT or TTS.
+- MCP tools are confirmable per server, via `mcp_servers[].requires_confirmation`
+  (default off, editable in Settings → Tools). Remote servers are user-
+  configured and their tool descriptions reach the model verbatim; the setting
+  is per *server* rather than per tool because a server defines its own tool
+  list and can change it between connections, so a per-tool opt-in would be
+  consent given to a name the remote end controls.
 - Config secrets are encrypted at rest with Windows DPAPI (config schema
   **v21**, migration `_migrate_v20_to_v21`). `research.brave_api_key`,
   `research.groq_api_key`, and `mcp_servers[].auth_token` were previously

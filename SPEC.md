@@ -389,4 +389,4 @@ These were open questions during planning and are now locked:
 These are flagged so Claude Code does not silently make decisions:
 
 1. **Hotkey library choice** (Phase 5): `pynput` vs `keyboard`. Decide based on Windows admin requirements and key coverage at the time of implementation.
-2. **Tool-call confirmation UX** (Phase 4): for `requires_confirmation=True` tools, do we show a toast and require voice confirmation, or auto-execute with a "say cancel within 3 seconds" pattern? Decide in Phase 4.
+2. ~~**Tool-call confirmation UX** (Phase 4): for `requires_confirmation=True` tools, do we show a toast and require voice confirmation, or auto-execute with a "say cancel within 3 seconds" pattern?~~ **Resolved: neither.** Both options needed the audio path — a spoken "cancel" window needs barge-in (disabled by speaker → mic feedback) and a spoken "yes" needs STT during TTS. The answer is a modal Qt dialog with a default-DENY timeout (`jarvis/ui/tool_confirm.py`), enforced at the single dispatch choke point in `ToolRegistry.execute()`. It touches no audio at all, and it fails closed: with no confirmer wired, a tool that asks for confirmation does not run.
