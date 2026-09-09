@@ -20,6 +20,7 @@ import sys
 import webbrowser
 from ctypes import wintypes
 from pathlib import Path
+from typing import Any
 
 # -- platform check -----------------------------------------------------
 
@@ -29,6 +30,20 @@ def _require_windows(feature: str) -> None:
         raise NotImplementedError(
             f"{feature} is Windows-only; current platform: {sys.platform}"
         )
+
+
+def _windll() -> Any:
+    """The Windows-only foreign-function loader ``ctypes.windll``.
+
+    It exists only in the Windows build of ctypes, and the type stubs
+    declare it that way, so a checker running on the Linux CI box does
+    not see the attribute at all. Every caller below is behind
+    `_require_windows()`, which raises before the lookup can happen off
+    Windows — funnelling the access through here keeps that one
+    unavoidable suppression in a single documented place instead of
+    scattering it over every Win32 call site.
+    """
+    return ctypes.windll  # type: ignore[reportAttributeAccessIssue]
 
 
 # -- browser / shell ----------------------------------------------------
@@ -182,7 +197,7 @@ def screenshots_dir() -> Path:
 def lock_screen() -> None:
     """Lock the workstation (Win+L equivalent). Raises OSError on failure."""
     _require_windows("lock_screen")
-    if not ctypes.windll.user32.LockWorkStation():
+    if not _windll().user32.LockWorkStation():
         raise OSError("LockWorkStation returned 0")
 
 
@@ -200,7 +215,7 @@ _KEYEVENTF_KEYUP = 0x0002
 
 def _tap_media_key(vk: int) -> None:
     _require_windows("volume control")
-    user32 = ctypes.windll.user32
+    user32 = _windll().user32
     user32.keybd_event(vk, 0, 0, 0)
     user32.keybd_event(vk, 0, _KEYEVENTF_KEYUP, 0)
 
@@ -231,8 +246,8 @@ def read_clipboard_text() -> str:
     clipboard is empty or holds a non-text format. Raises OSError on
     Windows API failures (OpenClipboard contention etc.)."""
     _require_windows("clipboard")
-    user32 = ctypes.windll.user32
-    kernel32 = ctypes.windll.kernel32
+    user32 = _windll().user32
+    kernel32 = _windll().kernel32
     user32.OpenClipboard.argtypes = [wintypes.HWND]
     user32.OpenClipboard.restype = wintypes.BOOL
     user32.GetClipboardData.argtypes = [wintypes.UINT]
@@ -270,8 +285,8 @@ def write_clipboard_text(text: str) -> None:
     _require_windows("clipboard")
     if text is None:
         text = ""
-    user32 = ctypes.windll.user32
-    kernel32 = ctypes.windll.kernel32
+    user32 = _windll().user32
+    kernel32 = _windll().kernel32
     user32.OpenClipboard.argtypes = [wintypes.HWND]
     user32.OpenClipboard.restype = wintypes.BOOL
     user32.EmptyClipboard.argtypes = []

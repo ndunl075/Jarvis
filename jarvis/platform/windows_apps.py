@@ -15,6 +15,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 
 from jarvis.platform.app_discovery import fuzzy_resolve, normalize_query
 
@@ -54,9 +55,25 @@ def _require_windows() -> None:
         )
 
 
+def _winreg() -> ModuleType:
+    """The stdlib ``winreg`` module.
+
+    winreg ships only on Windows, and the type stubs gate every one of
+    its members behind ``sys.platform == "win32"``, so a checker running
+    on the Linux CI box sees the module but none of its functions.
+    Returning it as a module rather than importing the name directly
+    keeps the registry call sites below readable without a suppression
+    on each one; both callers are behind `_require_windows()`, so the
+    import can only run where the module actually exists.
+    """
+    import winreg
+
+    return winreg
+
+
 def _read_steam_install_dir() -> Path | None:
     _require_windows()
-    import winreg
+    winreg = _winreg()
 
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _STEAM_KEY) as key:
@@ -161,7 +178,7 @@ def _scan_shortcuts(roots: list[Path]) -> dict[str, InstalledApp]:
 
 def _scan_app_paths_registry() -> dict[str, InstalledApp]:
     _require_windows()
-    import winreg
+    winreg = _winreg()
 
     apps: dict[str, InstalledApp] = {}
     try:

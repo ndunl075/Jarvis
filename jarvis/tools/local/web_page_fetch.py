@@ -127,7 +127,9 @@ def _resolve_host_ips(host: str, port: int | None) -> list[str]:
         infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     except OSError:
         return []
-    return [info[4][0] for info in infos if info[4]]
+    # str(): a sockaddr is declared as possibly being the (int, bytes)
+    # link-layer form, which a SOCK_STREAM host/port lookup never returns.
+    return [str(info[4][0]) for info in infos if info[4]]
 
 
 def _is_blocked_ip(raw: str) -> bool:

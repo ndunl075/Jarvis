@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from typing import TYPE_CHECKING, cast
 
 from PySide6.QtCore import (
     Qt,
@@ -39,6 +40,9 @@ from PySide6.QtWidgets import (
 )
 
 from jarvis.core.events import ConversationalStateChanged, EventBus
+
+if TYPE_CHECKING:
+    from jarvis.ui.overlay import AmplitudeLatch
 
 log = logging.getLogger(__name__)
 
@@ -80,7 +84,9 @@ class _MicBars(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._latch = amplitude_latch
+        # Duck-typed at the boundary (tests pass stand-ins); recorded under
+        # the real type so the _tick() read below stays checked.
+        self._latch = cast("AmplitudeLatch | None", amplitude_latch)
         self._level: float = 0.0
         self._timer = QTimer(self)
         self._timer.setInterval(33)
