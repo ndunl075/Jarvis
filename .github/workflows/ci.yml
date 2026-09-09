@@ -95,23 +95,30 @@ jobs:
       #   libxkbcommon-x11-0  - QtGui keyboard mapping
       #   libdbus-1-3         - Qt's D-Bus tray/theme integration
       # sounddevice needs libportaudio2 at import time for the same reason.
-      # apt-get update is retried because it is the one step here that can
-      # fail for reasons that have nothing to do with the change under test.
-      # Ubuntu's mirrors are updated per-file, so a run that fetches an index
-      # mid-sync gets a hash mismatch against the Release file and apt exits
-      # 100 ("Some index files failed to download"). That happened on a
-      # docs-only PR, and with ruff/pyright/pytest all blocking, an apt
-      # hiccup would otherwise block every pull request.
+      # Two failure modes are handled here, and they are different.
       #
-      # Clearing the lists between attempts matters: a cached partial index
-      # is what the mismatch is against, so retrying without removing it
-      # reproduces the same failure. If all three attempts fail the install
-      # below still runs and still fails the job -- this retries a flaky
-      # fetch, it does not hide a broken one.
+      # 1. The runner image ships third-party apt sources this project does
+      #    not use -- Google Chrome's among them. Its index has served a
+      #    Packages.gz whose hash does not match its own Release file, which
+      #    makes `apt-get update` exit 100 even though every Ubuntu archive
+      #    fetched cleanly. That failed a docs-only PR twice with byte-
+      #    identical hashes, so it is a stale index and not a transient
+      #    race; retrying cannot fix it. Every library below comes from the
+      #    Ubuntu archives, so those sources are simply removed first.
+      #
+      # 2. Ubuntu updates its mirrors per-file, so a fetch that lands
+      #    mid-sync genuinely can fail transiently. That one IS worth a
+      #    retry, and the cached partial index has to go between attempts
+      #    because it is what the mismatch is against.
+      #
+      # If all three attempts fail the install still runs and still fails
+      # the job. This tolerates a flaky fetch; it does not hide a broken one.
       - name: Install Qt and audio system libraries (Linux)
         if: runner.os == 'Linux'
         run: |
           set -euo pipefail
+          sudo rm -f /etc/apt/sources.list.d/*google*.list \
+                     /etc/apt/sources.list.d/*chrome*.list || true
           for attempt in 1 2 3; do
             if sudo apt-get update; then
               break
