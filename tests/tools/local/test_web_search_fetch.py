@@ -288,3 +288,75 @@ def test_live_duckduckgo_still_matches_our_parser():
     assert len(results) >= 1
     assert results[0]["url"].startswith("http")
     assert results[0]["title"]
+
+
+# ---------------------------------------------------------------------------
+# Regression: highlighted titles and link/snippet pairing
+#
+# The title group used to be `[^<]+`, which cannot match across the <b> tags
+# DuckDuckGo wraps around query terms in a title. Such an anchor did not match
+# at all, so the result disappeared — and because links and snippets were
+# collected into two independent lists and paired by index, the missing link
+# shifted every later snippet up by one. The visible symptom was a result that
+# kept its own title and URL but carried the NEXT site's description, which
+# then reached the summarizer as a numbered citation.
+# ---------------------------------------------------------------------------
+
+
+_HIGHLIGHTED_HTML = (
+    "<!DOCTYPE html>\n<html><body>\n"
+    '<div class="serp__results">\n'
+    + _result_block("//alpha.example/", "Plain Alpha", "snippet about ALPHA")
+    + _result_block(
+        "//beta.example/",
+        "Beta <b>highlighted</b> title",
+        "snippet about BETA",
+    )
+    + _result_block("//gamma.example/", "Plain Gamma", "snippet about GAMMA")
+    + "</div>\n</body></html>\n"
+)
+
+
+def test_title_with_inline_highlighting_is_kept(mock_ddg):
+    mock_ddg(_ok(_HIGHLIGHTED_HTML))
+    results = fetch_search_snippets("q")
+
+    assert len(results) == 3, "a <b>-highlighted title must not drop the result"
+    assert results[1]["title"] == "Beta highlighted title"
+    assert "<b>" not in results[1]["title"]
+
+
+def test_highlighted_title_does_not_shift_later_snippets(mock_ddg):
+    mock_ddg(_ok(_HIGHLIGHTED_HTML))
+    results = fetch_search_snippets("q")
+
+    # Each result must carry its OWN snippet, not the next site's.
+    for r in results:
+        host = r["url"].split("//")[-1].split(".")[0].upper()
+        assert r["content"] == f"snippet about {host}", (
+            f"{r['url']} carries {r['content']!r}"
+        )
+
+
+def test_link_without_a_snippet_does_not_shift_the_rest(mock_ddg):
+    """A link whose snippet anchor is absent must yield an empty snippet
+    rather than borrowing the following result's."""
+    html = (
+        "<!DOCTYPE html>\n<html><body>\n"
+        '<div class="serp__results">\n'
+        '  <a rel="nofollow" class="result__a" href="//alpha.example/">Alpha</a>\n'
+        + _result_block("//beta.example/", "Beta", "snippet about BETA")
+        + "</div>\n</body></html>\n"
+    )
+    mock_ddg(_ok(html))
+    results = fetch_search_snippets("q")
+
+    assert [r["url"] for r in results] == ["https://alpha.example/", "https://beta.example/"]
+    assert results[1]["content"] == "snippet about BETA"
+    # Alpha had no snippet; content falls back to its own title, never Beta's.
+    assert results[0]["content"] == "Alpha"
+
+
+def test_max_results_still_caps_after_pairing(mock_ddg):
+    mock_ddg(_ok(_HIGHLIGHTED_HTML))
+    assert len(fetch_search_snippets("q", max_results=2)) == 2
