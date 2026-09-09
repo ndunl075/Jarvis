@@ -288,6 +288,11 @@ async def _max_score_over_clip(ww: OpenWakeWord, clip_bytes: bytes) -> float:
         frame = clip_bytes[offset:offset + FRAME_BYTES]
         audio = np.frombuffer(frame, dtype=np.int16)
         scores = ww._model.predict(audio)
+        # Same normalisation OpenWakeWord.process_frame does: some
+        # openwakeword versions return (scores, debug) rather than a bare
+        # dict, and this helper claims to mirror that conversion.
+        if isinstance(scores, tuple):
+            scores = scores[0]
         s = float(scores.get("hey_jarvis", 0.0))
         if s > max_score:
             max_score = s
