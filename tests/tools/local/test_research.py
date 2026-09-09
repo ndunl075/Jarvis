@@ -15,6 +15,7 @@ from jarvis.tools.local.research import (
     _first_n_sentences,
 )
 from jarvis.tools.registry import EmptyArgs
+from tests._typing import output_text
 
 
 def _run(coro):
@@ -247,7 +248,7 @@ def test_read_more_end_of_summary():
     tool = ReadMoreTool(get_next=get_next)
     result = _run(tool.execute(EmptyArgs()))
     assert result.success is True
-    assert "end" in (result.output or "").lower()
+    assert "end" in output_text(result).lower()
 
 
 # ---------------------------------------------------------------------------
@@ -267,5 +268,5 @@ def test_copy_research_invokes_callback():
     tool = CopyResearchTool(copy_callback=cb)
     result = _run(tool.execute(EmptyArgs()))
     assert result.success is True
-    assert "clipboard" in (result.output or "").lower()
+    assert "clipboard" in output_text(result).lower()
     cb.assert_called_once()

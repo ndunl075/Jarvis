@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from jarvis.tools.local.open_url import OpenUrlArgs, OpenUrlTool
+from tests._typing import output_text
 
 
 async def test_opens_http_url_through_platform_seam():
@@ -18,7 +19,7 @@ async def test_opens_http_url_through_platform_seam():
     op.assert_called_once_with("http://example.com/page?q=1")
     # Spoken output uses the friendly name (capitalised first label
     # fallback for unknown sites), not the URL.
-    assert (result.output or "").startswith("Opening Example")
+    assert output_text(result).startswith("Opening Example")
 
 
 async def test_opens_https_url():

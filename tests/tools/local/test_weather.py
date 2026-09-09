@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from jarvis.tools.local.weather import _WMO, WeatherArgs, WeatherTool, _geocode_queries
+from tests._typing import output_text
 
 
 def _cfg(lat=None, lon=None, unit="fahrenheit"):
@@ -71,7 +72,7 @@ async def test_configured_location_calls_meteo_with_coords():
     assert result.success
     assert "72" in (result.output or "")
     assert "clear skies" in (result.output or "")
-    assert "sir" in (result.output or "").lower()
+    assert "sir" in output_text(result).lower()
 
 
 async def test_ip_fallback_calls_ipapi_then_meteo():
@@ -86,7 +87,7 @@ async def test_ip_fallback_calls_ipapi_then_meteo():
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         result = await tool.execute(WeatherArgs())
     assert result.success
-    output = result.output or ""
+    output = output_text(result)
     assert "55" in output
     assert "light rain" in output
 
@@ -134,7 +135,7 @@ async def test_location_arg_geocodes_then_fetches_weather():
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         result = await tool.execute(WeatherArgs(location="London"))
     assert result.success
-    output = result.output or ""
+    output = output_text(result)
     assert "58" in output
     assert "partly cloudy" in output
     assert "London" in output
@@ -165,7 +166,7 @@ async def test_no_location_arg_does_not_include_city_in_output():
         mock_cls.return_value.__aenter__ = AsyncMock(return_value=client)
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         result = await tool.execute(WeatherArgs())
-    output = result.output or ""
+    output = output_text(result)
     assert " in " not in output
     assert output.endswith("sir.")
 
@@ -185,7 +186,7 @@ async def test_geocoding_no_results_falls_back_to_default():
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         result = await tool.execute(WeatherArgs(location="Atlantis"))
     assert result.success
-    output = result.output or ""
+    output = output_text(result)
     assert "couldn't find" in output.lower()
     assert "Atlantis" in output
     assert "default location" in output.lower()
@@ -204,7 +205,7 @@ async def test_geocoding_timeout_falls_back_to_default():
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         result = await tool.execute(WeatherArgs(location="Atlantis"))
     assert result.success
-    output = result.output or ""
+    output = output_text(result)
     assert "couldn't find" in output.lower()
     assert "60" in output
 
@@ -240,8 +241,8 @@ async def test_network_error_returns_spoken_fallback():
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         result = await tool.execute(WeatherArgs())
     assert not result.success
-    assert "couldn't reach" in (result.output or "").lower()
-    assert "sir" in (result.output or "").lower()
+    assert "couldn't reach" in output_text(result).lower()
+    assert "sir" in output_text(result).lower()
 
 
 async def test_ipapi_failure_returns_spoken_fallback():
@@ -254,7 +255,7 @@ async def test_ipapi_failure_returns_spoken_fallback():
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         result = await tool.execute(WeatherArgs())
     assert not result.success
-    assert "couldn't reach" in (result.output or "").lower()
+    assert "couldn't reach" in output_text(result).lower()
 
 
 # --- geocoding retry (city+state format) ---
@@ -287,7 +288,7 @@ async def test_geocoding_city_state_retries_city_only_when_first_fails():
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         result = await tool.execute(WeatherArgs(location="Reston, Virginia"))
     assert result.success
-    output = result.output or ""
+    output = output_text(result)
     assert "Reston" in output
     assert "65" in output
     assert client.get.call_count == 3  # geocode x2 + meteo x1
@@ -306,7 +307,7 @@ async def test_geocoding_city_state_falls_back_when_both_queries_fail():
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         result = await tool.execute(WeatherArgs(location="Atlantis, GA"))
     assert result.success
-    output = result.output or ""
+    output = output_text(result)
     assert "couldn't find" in output.lower()
     assert "75" in output
 

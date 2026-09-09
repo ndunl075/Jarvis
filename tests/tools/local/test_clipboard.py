@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from jarvis.tools.local.clipboard import ClipboardTool
 from jarvis.tools.registry import EmptyArgs
+from tests._typing import output_text
 
 
 async def test_returns_clipboard_text_verbatim():
@@ -25,7 +26,7 @@ async def test_empty_clipboard_returns_friendly_message():
     ):
         result = await ClipboardTool().execute(EmptyArgs())
     assert result.success
-    assert "empty" in (result.output or "").lower()
+    assert "empty" in output_text(result).lower()
 
 
 async def test_long_text_summarised_not_dumped():
@@ -38,7 +39,7 @@ async def test_long_text_summarised_not_dumped():
     ):
         result = await ClipboardTool().execute(EmptyArgs())
     assert result.success
-    out = result.output or ""
+    out = output_text(result)
     assert "5000" in out
     assert len(out) < len(text)
 
