@@ -1,0 +1,114 @@
+name: CI
+
+# `push` covers the default branch (and anything a maintainer pushes
+# directly); `pull_request` covers contributor branches, including forks.
+# Push is scoped to main on purpose — a PR branch in this repo would
+# otherwise build twice for every commit.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same ref makes the in-flight run obsolete. Cancel it
+# rather than paying for four matrix jobs whose result nobody will read.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Nothing in this workflow writes to the repository or to packages.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / py${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    strategy:
+      # One red cell must not hide the other three. A break that only shows
+      # up on Windows, or only on 3.12, is exactly what this matrix is for.
+      fail-fast: false
+      matrix:
+        # Jarvis ships as a Windows application, so windows-latest is the
+        # platform of record: the jarvis/platform/windows.py seams and the
+        # pyautogui/pynput dependencies only exist there. ubuntu-latest runs
+        # the same suite because it is cheaper and faster, and the large
+        # majority of the code is platform-independent.
+        os: [ubuntu-latest, windows-latest]
+        # pyproject.toml sets requires-python = ">=3.11"; ruff and pyright
+        # are both configured for py311. 3.12 guards against the next
+        # interpreter bump landing as a surprise.
+        python-version: ["3.11", "3.12"]
+
+    env:
+      # The UI tests in tests/ui/ construct real QWidgets, so Qt needs a
+      # platform plugin. "offscreen" is Qt's built-in headless plugin — no
+      # X server and no xvfb-run wrapper — and it behaves the same on both
+      # runners, which keeps the two OS legs comparable.
+      #
+      # tests/ui/conftest.py already calls
+      # os.environ.setdefault("QT_QPA_PLATFORM", "offscreen") before PySide6
+      # is imported. Setting it here too means any future test that reaches
+      # Qt without going through that conftest is still covered, and it
+      # documents the requirement somewhere CI can see it.
+      #
+      # Decision: the UI tests run on BOTH platforms. They were verified to
+      # collect and execute under the offscreen plugin on Linux, so there is
+      # no reason to narrow them to windows-latest.
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # PySide6's wheels bundle Qt itself but still dynamically link a few
+      # system libraries the ubuntu runner image does not ship. Without them
+      # importing PySide6.QtWidgets aborts before any test runs, even under
+      # the offscreen plugin:
+      #   libegl1, libgl1     - libqoffscreen.so links libEGL.so.1 / libGL.so.1
+      #   libxkbcommon-x11-0  - QtGui keyboard mapping
+      #   libdbus-1-3         - Qt's D-Bus tray/theme integration
+      # sounddevice needs libportaudio2 at import time for the same reason.
+      - name: Install Qt and audio system libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 \
+            libgl1 \
+            libxkbcommon-x11-0 \
+            libdbus-1-3 \
+            libportaudio2
+
+      # Editable install so pytest imports the working tree, plus the dev
+      # extra so ruff / pyright / pytest come from the versions pyproject
+      # pins. pyautogui and pynput carry a sys_platform == "win32" marker,
+      # so this resolves to a smaller set on the Linux leg — see the comment
+      # on those two entries in pyproject.toml.
+      - name: Install package with dev extras
+        run: pip install -e ".[dev]"
+
+      # Every check below is a blocking gate. No continue-on-error and no
+      # `|| true`: a red build is the entire point of this file.
+      - name: Lint (ruff)
+        run: ruff check jarvis tests
+
+      # pyright reads [tool.pyright] from pyproject.toml (include = jarvis,
+      # tests; typeCheckingMode = standard). Do not pass paths here or that
+      # include list is overridden.
+      - name: Type check (pyright)
+        run: pyright
+
+      # pytest reads [tool.pytest.ini_options]: testpaths = tests,
+      # asyncio_mode = auto, and addopts = -m 'not manual', which deselects
+      # the operator-run tests that need real hardware or a live Ollama.
+      - name: Test (pytest)
+        run: pytest
