@@ -20,9 +20,32 @@ from jarvis.core.config import JarvisConfig
 
 log = logging.getLogger(__name__)
 
-# Hardcoded so the About tab doesn't pull in importlib.metadata at
-# UI-construction time. Update on each release.
-JARVIS_VERSION: str = "0.1.0-dev"
+# pyproject.toml is the source of truth for the version -- build.ps1 already
+# reads it with importlib.metadata.version("jarvis") to name the release zip.
+# This used to be a hardcoded "0.1.0-dev" that had drifted from pyproject's
+# "0.0.1", so the About tab showed users a version that appeared nowhere else:
+# not in the download link, the changelog, or the release tag.
+#
+# Resolved once at import rather than per UI construction, so the original
+# concern (don't pay for this while building the tab) still holds.
+#
+# The fallback is the path that actually runs in the shipped app: jarvis.spec
+# does not bundle the dist-info, so importlib.metadata cannot find the package
+# when frozen. test_about_fallback_version_matches_pyproject pins the literal
+# below to pyproject.toml, so it cannot drift again the way "0.1.0-dev" did.
+_FALLBACK_VERSION = "0.0.1"
+
+
+def _detect_version() -> str:
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+
+        return version("jarvis")
+    except (PackageNotFoundError, ImportError, OSError):
+        return _FALLBACK_VERSION
+
+
+JARVIS_VERSION: str = _detect_version()
 GITHUB_URL: str = "https://github.com/ndunl075/Jarvis"
 
 _OLLAMA_ENDPOINT = "http://127.0.0.1:11434"
