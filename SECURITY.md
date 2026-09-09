@@ -13,9 +13,9 @@ older versions.
 
 | Version | Supported |
 | ------- | --------- |
-| 0.0.1 (latest release) | Yes |
-| `main` (unreleased) | Yes — fixes land here first |
-| Anything older | No — upgrade to the latest release |
+| 0.0.1 (current version) | Yes |
+| `main` | Yes — fixes land here first |
+| Anything older | No — upgrade to the current version |
 
 ## Reporting a vulnerability
 

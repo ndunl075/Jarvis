@@ -82,9 +82,10 @@ exercised against fakes — but you need one to run the app.
 python -m jarvis
 ```
 
-From source, logs go to the console. The packaged build writes to
-`%APPDATA%\Jarvis\logs\jarvis.log` instead; config always lives at
-`%APPDATA%\Jarvis\config.json`.
+From source, logs go to the console; the packaged build writes to
+`%APPDATA%\Jarvis\logs\jarvis.log` instead. Config lives at
+`%APPDATA%\Jarvis\config.json` on Windows and at `~/.jarvis/config.json`
+elsewhere.
 
 There is also an audio-only harness that skips the LLM:
 
@@ -164,7 +165,9 @@ module docstring:
 Functions there raise `OSError` on Windows-API failure so callers can turn the
 message into a `ToolResult.error`, and `NotImplementedError` on non-Windows
 hosts. This single seam is what makes the tools testable at all — a tool test
-patches `jarvis.platform.windows.launch_app`, not `subprocess.Popen`.
+patches the `winplat` alias in the tool module
+(`patch("jarvis.tools.local.open_app.winplat.launch_app")`) rather than
+monkey-patching `subprocess.Popen`.
 
 `SPEC.md` states the boundary rules directly:
 
