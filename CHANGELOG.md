@@ -14,6 +14,17 @@ loses settings.
 
 ### Added
 
+- Tool-result feedback loop. When the model calls a tool, its result is now fed
+  back as a `role: "tool"` message and the model is re-invoked, so it can act on
+  what came back: "what's the weather, and if it's below 10 open my coat app",
+  or "list my Downloads folder and tell me which one is the invoice". Previously
+  every interaction was one-shot — the result was spoken at you and the model
+  never saw it, so nothing that took two steps was possible.
+- `llm.max_tool_iterations` (config schema v21, default 3) caps how many model
+  invocations one turn may use. Each iteration is another full inference, so
+  this is a latency budget; on reaching it Jarvis speaks the tool output it has
+  rather than looping. Set it to `1` to disable the loop and restore the old
+  one-shot behaviour, where a tool's own output is spoken verbatim.
 - Continuous integration (`.github/workflows/ci.yml`): ruff, pyright, and pytest
   run as blocking gates on `ubuntu-latest` and `windows-latest` across Python
   3.11 and 3.12, using the existing `pyproject.toml` configuration.
@@ -30,6 +41,10 @@ loses settings.
 
 ### Changed
 
+- Snap commands are unaffected by the feedback loop: "open spotify", "volume
+  up", "research X" and every other pattern-matched phrase still bypass the LLM
+  entirely. Only tools the model chooses go through the loop, and those now
+  answer in Jarvis's own words instead of reading the tool's raw output.
 - `pyautogui` and `pynput` are now declared with a `sys_platform == "win32"`
   marker. Both are Windows-only input libraries, both are already imported
   lazily at their call sites, and both already degrade to a logged warning or a

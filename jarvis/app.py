@@ -112,7 +112,22 @@ def _make_router_adapter(
     conversation: Conversation,
     registry: ToolRegistry,
 ):
-    """Wrap IntentRouter as a ResponseProducer (Callable[[str], AsyncIterator[str]])."""
+    """Wrap IntentRouter as a ResponseProducer (Callable[[str], AsyncIterator[str]]).
+
+    ToolIntents reaching this adapter come from the PATTERN layer
+    ("open spotify", "volume up") — snap commands that bypass the LLM
+    and whose tool output is the answer, spoken verbatim with no
+    inference in the way.
+
+    LLM-chosen tools do NOT arrive here when the tool-result feedback
+    loop is on (cfg.llm.max_tool_iterations > 1): the router executes
+    those itself so it can feed the results back to the model, and
+    yields only the SpeakIntents of the model's final answer. With
+    max_tool_iterations == 1 the router falls back to yielding
+    ToolIntents and this branch handles them exactly as it always did.
+    The contextvar is set before iteration begins, so tools executed
+    inside route() still see the transcription that prompted them.
+    """
 
     async def producer(transcription: str) -> AsyncIterator[str]:
         print(f"[router] route({transcription!r})")
@@ -521,7 +536,12 @@ def run() -> int:
     # Research tools are wired later (step 12) after the Qt app and
     # ResearchPanel are created, because their callbacks reference the panel.
     mcp_manager = MCPManager(registry)
-    router = IntentRouter(llm=ollama, conversation=conversation, registry=registry)
+    router = IntentRouter(
+        llm=ollama,
+        conversation=conversation,
+        registry=registry,
+        max_tool_iterations=cfg.llm.max_tool_iterations,
+    )
 
     lm = LifecycleManager([source, wake_word, vad, stt, tts, ollama], bus=bus)
 
