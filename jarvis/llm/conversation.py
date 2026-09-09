@@ -81,9 +81,12 @@ message whose results never arrived. Two layers defend against it:
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+
+log = logging.getLogger(__name__)
 
 # A single message in OpenAI/Ollama chat format.
 Message = dict
@@ -284,7 +287,7 @@ class Conversation:
         had_turns = bool(self._turns)
         self._turns.clear()
         if had_turns:
-            print("[conversation] cleared on wake")
+            log.debug("history cleared on wake")
 
     def maybe_clear(self, continuity_seconds: float) -> None:
         """Clear history on wake-word activation using the time-windowed rule.
@@ -302,9 +305,10 @@ class Conversation:
         if elapsed > continuity_seconds:
             self.clear()
         else:
-            print(
-                f"[conversation] kept on wake "
-                f"({elapsed:.0f}s < {continuity_seconds:.0f}s continuity window)"
+            log.debug(
+                "history kept on wake (%.0fs < %.0fs continuity window)",
+                elapsed,
+                continuity_seconds,
             )
 
     def has_unanswered_user_turn(self) -> bool:

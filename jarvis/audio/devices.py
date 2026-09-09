@@ -269,15 +269,18 @@ class AudioInputSource:
             return None, e
         self._stream = stream
         self._native_rate = native_rate
+        # Once-per-open boot fact: which rate the mic actually gave us and
+        # whether we are resampling. INFO -- an operator wants it at default
+        # verbosity, and it carries nothing user-derived.
         if native_rate != SAMPLE_RATE:
-            print(
-                f"[boot] input opened at {native_rate}Hz, "
-                f"resampling to {SAMPLE_RATE}Hz"
+            log.info(
+                "[boot] input opened at %dHz, resampling to %dHz",
+                native_rate, SAMPLE_RATE,
             )
         else:
-            print(
-                f"[boot] input opened at {native_rate}Hz "
-                "(native, no resample)"
+            log.info(
+                "[boot] input opened at %dHz (native, no resample)",
+                native_rate,
             )
         return stream, None
 

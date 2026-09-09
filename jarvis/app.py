@@ -105,6 +105,14 @@ def _setup_logging(level_name: str = "INFO") -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
+    # basicConfig() is a no-op once the root logger already has a handler,
+    # and the frozen launcher (jarvis/__main__.py) installs a file handler
+    # at INFO before run() is reached. Set the level explicitly so the
+    # Settings "Log level" is authoritative in packaged builds too --
+    # otherwise the DEBUG trace wired by _wire_event_logging() would be
+    # unreachable in exactly the build where there is no console to fall
+    # back on.
+    logging.getLogger().setLevel(level)
 
 
 def _make_router_adapter(
@@ -130,13 +138,13 @@ def _make_router_adapter(
     """
 
     async def producer(transcription: str) -> AsyncIterator[str]:
-        print(f"[router] route({transcription!r})")
+        log.debug("[router] route(%r)", transcription)
         has_tool_intent = False
         tool_spoken: list[str] = []
         ctx_token = current_user_transcription.set(transcription)
         try:
             async for intent in router.route(transcription):
-                print(f"[router]  -> {type(intent).__name__}")
+                log.debug("[router]  -> %s", type(intent).__name__)
                 if isinstance(intent, StopIntent):
                     return
                 if isinstance(intent, ToolIntent):
@@ -161,26 +169,42 @@ def _make_router_adapter(
     return producer
 
 
-def _wire_printers(bus: EventBus) -> None:
-    """Subscribe stdout printers to the events worth watching in dev."""
+def _wire_event_logging(bus: EventBus) -> None:
+    """Subscribe DEBUG trace logging to the events worth watching.
+
+    Every line here is per-interaction trace, so every line is DEBUG: at
+    the default INFO level none of it is emitted at all, and the lazy %r
+    arguments are not even formatted.
+
+    Three of these events (TranscriptionReady, LLMResponseChunk,
+    LLMResponseComplete) carry the user's own words. Keeping them is a
+    deliberate choice -- a visible transcript is the only way to debug
+    "it misheard me" -- but it is a choice the user makes, by raising
+    Settings -> Log level to DEBUG. Note the consequence, because it is
+    the reason this is a choice and not a default: at DEBUG the
+    transcript lands in %APPDATA%/Jarvis/logs/jarvis.log and persists on
+    disk until that file rotates away. That is the trade for being able
+    to see what Jarvis heard. At any other level the text never leaves
+    the process.
+    """
 
     def on_mode(e: ModeChanged) -> None:
-        print(f"[mode] {e.old.name} -> {e.new.name}")
+        log.debug("[mode] %s -> %s", e.old.name, e.new.name)
 
     def on_cs(e: ConversationalStateChanged) -> None:
-        print(f"[cs]   {e.old.name} -> {e.new.name}")
+        log.debug("[cs] %s -> %s", e.old.name, e.new.name)
 
     def on_wake(e: WakeWordDetected) -> None:
-        print(f"[wake] confidence={e.confidence:.2f}")
+        log.debug("[wake] confidence=%.2f", e.confidence)
 
     def on_transcription(e: TranscriptionReady) -> None:
-        print(f"[stt]  {e.text!r} ({e.duration_ms} ms of audio)")
+        log.debug("[stt] %r (%d ms of audio)", e.text, e.duration_ms)
 
     def on_chunk(e: LLMResponseChunk) -> None:
-        print(f"[resp] {e.text!r}")
+        log.debug("[resp] %r", e.text)
 
     def on_complete(e: LLMResponseComplete) -> None:
-        print(f"[done] full response: {e.full_text!r}")
+        log.debug("[done] full response: %r", e.full_text)
 
     bus.subscribe(ModeChanged, on_mode)
     bus.subscribe(ConversationalStateChanged, on_cs)
@@ -657,9 +681,9 @@ def run() -> int:
             return 1
 
     # ------------------------------------------------------------------
-    # 11. Verbose console (dev-time visibility; gate behind config later)
+    # 11. Per-interaction trace (DEBUG only; Settings -> Log level)
     # ------------------------------------------------------------------
-    _wire_printers(bus)
+    _wire_event_logging(bus)
 
     # ------------------------------------------------------------------
     # 12-14. Qt UI components

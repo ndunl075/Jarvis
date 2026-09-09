@@ -749,11 +749,12 @@ async def test_wasapi_open_failure_falls_back_to_mme(
 
 
 async def test_boot_announces_resample_when_native_rate_differs(
-    tmp_path, capsys: pytest.CaptureFixture[str]
+    tmp_path, caplog
 ):
-    """Boot diagnostic goes to stdout (print), not the logger. When the
-    device's native rate (48000 Hz) differs from Piper's synthesis rate
-    (22050 Hz), native rate is opened first and the resample is announced."""
+    """Boot diagnostic goes to the logger at INFO, never to stdout — the
+    windowed build has no console to print to. When the device's native
+    rate (48000 Hz) differs from Piper's synthesis rate (22050 Hz), native
+    rate is opened first and the resample is announced."""
     devices = [
         {"name": "USB DAC", "max_output_channels": 2, "hostapi": 0,
          "default_samplerate": 48000.0},
@@ -777,13 +778,18 @@ async def test_boot_announces_resample_when_native_rate_differs(
             voices_dir=tmp_path,
             output_device="USB DAC",
         )
-        await tts.load()
-    out = capsys.readouterr().out
-    assert "[boot] output opened at 48000Hz, resampling from 22050Hz" in out
+        with caplog.at_level(logging.INFO, logger="jarvis.audio.tts"):
+            await tts.load()
+    assert any(
+        r.levelno == logging.INFO
+        and "[boot] output opened at 48000Hz, resampling from 22050Hz"
+        == r.getMessage()
+        for r in caplog.records
+    )
 
 
 async def test_boot_announces_no_resample_when_native_equals_piper_rate(
-    tmp_path, capsys: pytest.CaptureFixture[str]
+    tmp_path, caplog
 ):
     """When the device's native rate equals Piper's synthesis rate (both
     22050 Hz), only one open attempt is made and the boot line reports no
@@ -811,9 +817,13 @@ async def test_boot_announces_no_resample_when_native_equals_piper_rate(
             voices_dir=tmp_path,
             output_device="USB DAC",
         )
-        await tts.load()
-    out = capsys.readouterr().out
-    assert "[boot] output opened at 22050Hz (no resample)" in out
+        with caplog.at_level(logging.INFO, logger="jarvis.audio.tts"):
+            await tts.load()
+    assert any(
+        r.levelno == logging.INFO
+        and "[boot] output opened at 22050Hz (no resample)" == r.getMessage()
+        for r in caplog.records
+    )
 
 
 # --- speak ------------------------------------------------------------
@@ -844,22 +854,27 @@ async def test_time_compress_helper_still_works_when_enabled(monkeypatch):
     assert abs(len(out_samples) - expected) <= 2
 
 
-async def test_first_synth_duration_diagnostic_emits_once(capsys):
+async def test_first_synth_duration_diagnostic_emits_once(caplog):
     """The diagnostic compares actual synthesised audio duration against
     the expected default-scale baseline so a Piper version that ignores
     SynthesisConfig.length_scale is visible at runtime. Fires once per
-    instance to avoid spamming."""
+    instance to avoid spamming. DEBUG-level and logger-bound, never
+    stdout: the spoken text's length is user-derived."""
     # 22050 Hz int16: 44100 bytes/sec.
     chunk = b"\x00\x00" * 22050  # exactly 1 second of audio
     tts, _, _ = _loaded_tts(voice_chunks=[chunk])
-    await tts.speak("hello world from the first synth")
-    out = capsys.readouterr().out
-    assert "[tts-debug] first-synth" in out
-    assert "ratio_vs_default=" in out
-    # Second speak() must NOT re-emit the diagnostic.
-    capsys.readouterr()  # drain
-    await tts.speak("the second utterance, please.")
-    assert "[tts-debug]" not in capsys.readouterr().out
+    with caplog.at_level(logging.DEBUG, logger="jarvis.audio.tts"):
+        await tts.speak("hello world from the first synth")
+        hits = [r for r in caplog.records if "first-synth" in r.getMessage()]
+        assert len(hits) == 1
+        assert hits[0].levelno == logging.DEBUG
+        assert "ratio_vs_default=" in hits[0].getMessage()
+        # Second speak() must NOT re-emit the diagnostic.
+        caplog.clear()
+        await tts.speak("the second utterance, please.")
+        assert not [
+            r for r in caplog.records if "first-synth" in r.getMessage()
+        ]
 
 
 async def test_speak_starts_stream_and_audio_reaches_callback(time_compress_off):
