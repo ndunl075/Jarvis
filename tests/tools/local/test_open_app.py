@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from jarvis.tools.local.open_app import OpenAppArgs, OpenAppTool
 
 
@@ -160,3 +162,94 @@ async def test_resolver_exception_does_not_crash_falls_through():
 
 def test_requires_confirmation_false():
     assert OpenAppTool().requires_confirmation is False
+
+
+# -- shell-metacharacter injection --------------------------------------
+#
+# Candidate 4 hands the raw resolved token (the LLM tool argument or the
+# voice transcription) to the platform launcher. These tests patch one
+# level deeper than the others — at jarvis.platform.windows's ShellExecuteW
+# seam — so the real launcher, including its validation, runs.
+
+
+@pytest.fixture
+def shell_execute():
+    with (
+        patch("jarvis.platform.windows._require_windows"),
+        patch("jarvis.platform.windows._shell_execute") as exec_seam,
+    ):
+        yield exec_seam
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["zzqq&calc", "zzqq|calc", "zzqq>out.txt", "zzqq^&calc", 'zzqq"&calc'],
+)
+async def test_metacharacter_token_launches_nothing(name, shell_execute):
+    """A token that matches no installed app reaches candidate 4 verbatim.
+    Nothing may be launched from it: not the attacker's second command, and
+    not the first one either."""
+    result = await OpenAppTool(app_resolver=lambda q: None).execute(
+        OpenAppArgs(name=name)
+    )
+    assert not result.success
+    shell_execute.assert_not_called()
+
+
+async def test_newline_in_name_is_collapsed_not_injected(shell_execute):
+    """A CR/LF never gets as far as the launcher from this tool:
+    normalize_open_query collapses whitespace, so the target stays a single
+    string. (launch_app rejects control characters regardless — see
+    tests/platform/test_windows_launchers.py, which covers callers that do
+    not normalize.)"""
+    await OpenAppTool(app_resolver=lambda q: None).execute(
+        OpenAppArgs(name="zzqq\ncalc")
+    )
+    assert shell_execute.call_args.args == ("zzqq calc",)
+
+
+async def test_legitimate_token_reaches_launcher_whole(shell_execute):
+    """The same path an injection token takes still launches real apps,
+    with the name passed as a single string."""
+    result = await OpenAppTool(app_resolver=lambda q: None).execute(
+        OpenAppArgs(name="chrome")
+    )
+    assert result.success
+    shell_execute.assert_called_once_with("chrome")
+
+
+@pytest.mark.parametrize(
+    "launch_command",
+    [
+        r"C:\Program Files\App\app.exe",
+        r"C:\Apps\Photoshop.lnk",
+        r"C:\Games\Dungeons & Dragons Online.lnk",
+    ],
+)
+async def test_installed_app_paths_still_launch(launch_command, shell_execute):
+    """Paths with spaces, .lnk shortcuts and app names containing `&` are
+    not rejected: they never touch a command line now."""
+    from jarvis.platform.windows_apps import InstalledApp
+
+    app = InstalledApp(display_name="App", launch_command=launch_command)
+    result = await OpenAppTool(app_resolver=lambda q: app).execute(
+        OpenAppArgs(name="app")
+    )
+    assert result.success
+    shell_execute.assert_called_once_with(launch_command)
+
+
+async def test_installed_match_still_wins_over_unsafe_raw_token(shell_execute):
+    """An installed app whose name contains `&` launches by its real path;
+    the raw token is never needed, so nothing is rejected."""
+    from jarvis.platform.windows_apps import InstalledApp
+
+    app = InstalledApp(
+        display_name="Dungeons & Dragons Online",
+        launch_command=r"C:\Games\DDO.lnk",
+    )
+    result = await OpenAppTool(app_resolver=lambda q: app).execute(
+        OpenAppArgs(name="dungeons & dragons online")
+    )
+    assert result.success
+    shell_execute.assert_called_once_with(r"C:\Games\DDO.lnk")

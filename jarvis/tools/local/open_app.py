@@ -3,17 +3,18 @@
 Resolution order (most reliable first):
   1. Fuzzy match against installed apps (Start Menu + App Paths) on the
      spoken token — yields a real .lnk / .exe path, which launches
-     reliably. This comes FIRST because `start "<name>"` (steps 2/4)
-     returns success even when Windows can't actually resolve the name
-     (it pops an error dialog but the process exits 0), so a per-user
-     install like Spotify or Discord would silently "succeed" while
-     nothing opened.
+     reliably. This comes FIRST because a bare name (steps 2/4) is only
+     as good as what Windows can resolve for it, so a per-user install
+     like Spotify or Discord may not open at all.
   2. Alias table (chrome -> chrome, vscode -> code, …): the alias is a
      normalization hint. We re-resolve the canonical token against the
      installed index, then fall back to the bare command for
      App-Paths / PATH resolution.
   3. Direct path launch if the token is an existing file.
-  4. Pass-through to Windows `start` for PATH / file associations.
+  4. Pass-through to Windows shell resolution (App Paths / PATH / file
+     associations). This is the one candidate built from raw, untrusted
+     text, so jarvis.platform.windows rejects it if it carries shell
+     metacharacters; the tool reports that like any other launch failure.
 """
 
 from __future__ import annotations
@@ -161,7 +162,7 @@ class OpenAppTool:
         if path.is_file():
             candidates.append((str(path.resolve()), token))
 
-        # 4. Last resort: hand the raw token to Windows `start`.
+        # 4. Last resort: hand the raw token to Windows shell resolution.
         candidates.append((token, token))
 
         seen: set[str] = set()
@@ -175,7 +176,10 @@ class OpenAppTool:
                 return ToolResult(success=True, output=f"Opening {display}, sir.")
             except NotImplementedError as e:
                 return ToolResult(success=False, error=str(e))
-            except OSError as e:
+            except (OSError, ValueError) as e:
+                # ValueError: the platform layer refused the target (shell
+                # metacharacters / control characters). Treated like any
+                # other failed candidate so a safe later one still runs.
                 last_error = str(e)
                 log.warning("open_app: launch failed for %r: %s", command, e)
 
