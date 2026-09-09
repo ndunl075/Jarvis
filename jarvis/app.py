@@ -564,8 +564,8 @@ class JarvisApp:
         # Panels that _on_quit and the tray handlers must tolerate being
         # absent: these were the `[None]` cells run() carried for exactly
         # the same reason, and they are read before _build_ui has run.
-        # (_on_config_change reads research_panel that way; _on_quit does
-        # not, which is run()'s asymmetry, kept.)
+        # The tray is built (and shown, with a live Quit action) before
+        # any of them, so every read of one has to be None-guarded.
         self.research_panel: ResearchPanel | None = None
         self.deep_research_panel: DeepResearchPanel | None = None
         self.notes_panel: NotesPanel | None = None
@@ -948,7 +948,8 @@ class JarvisApp:
         self.tray.close()
         self.orb.close()
         self.hotkeys.close()
-        self.research_panel.close_panel()
+        if self.research_panel is not None:
+            self.research_panel.close_panel()
         if self.deep_research_panel is not None:
             self.deep_research_panel.close_panel()
         if self.notes_panel is not None:
