@@ -13,6 +13,8 @@ ToolResult error on Linux/macOS dev machines."""
 from __future__ import annotations
 
 import ctypes
+import ntpath
+import os
 import subprocess
 import sys
 import webbrowser
@@ -38,34 +40,116 @@ def open_url(url: str) -> None:
     webbrowser.open(url)
 
 
-def launch_app(command: str) -> None:
-    """Launch an app by command line. Uses `cmd /c start` so Windows file
-    associations resolve names like 'chrome' or 'spotify' without us
-    knowing their install path.
+# Windows has no argv: subprocess joins the list back into one command
+# line (subprocess.list2cmdline) and the launched program re-parses it.
+# list2cmdline quotes only arguments containing spaces or tabs, so when the
+# launched program was cmd.exe its metacharacters passed through raw —
+# `cmd /c start "" notepad&calc` is two commands, `shell=False` or not.
+# These launchers therefore never invoke cmd.exe: os.startfile hands the
+# target to ShellExecuteW as one opaque string, which is the same API
+# `start` ultimately calls, so name resolution is unchanged. The validators
+# below are the second line of defence.
 
-    `command` is passed to start as a single argument (the leading "" is
-    start's required window-title slot). Tests patch subprocess.Popen."""
+# cmd.exe metacharacters. Strict set, for bare command tokens only.
+_COMMAND_METACHARACTERS = frozenset('&|<>^"%!')
+
+# Characters Windows already forbids in a path, and that no shell: URI
+# contains. The strict set above would be wrong for paths — see
+# validate_launch_target_path.
+_PATH_ILLEGAL_CHARACTERS = frozenset('<>"|')
+
+
+def _reject_unsafe(value: str, illegal: frozenset[str], *, kind: str) -> None:
+    """Raise ValueError if `value` holds characters a launcher must not
+    forward. Control characters (CR/LF and NUL among them) are rejected for
+    every kind: they are illegal in Windows paths, and a newline is the
+    plainest way to smuggle a second line into anything that later parses a
+    command line."""
+    if not value.strip():
+        raise ValueError(f"{kind} is empty")
+    bad = sorted({c for c in value if c in illegal or ord(c) < 0x20 or ord(c) == 0x7F})
+    if bad:
+        raise ValueError(
+            f"{kind} contains disallowed characters: " + " ".join(repr(c) for c in bad)
+        )
+
+
+def validate_launch_command(command: str) -> None:
+    """Validate a bare app name / command token ('chrome', 'msedge').
+
+    Strict, because this is the launcher input that carries untrusted text:
+    open_app's last-resort candidate is the LLM's tool argument or the raw
+    voice transcription, normalized only for filler words. Nothing
+    legitimate arriving here — an executable name resolved through App
+    Paths or PATH — needs a shell metacharacter."""
+    _reject_unsafe(command, _COMMAND_METACHARACTERS, kind="launch command")
+
+
+def validate_launch_target_path(path: str) -> None:
+    """Validate a filesystem path or shell: namespace URI.
+
+    Deliberately narrower than validate_launch_command: it rejects only
+    what Windows already forbids in a path. Legitimate targets do contain
+    command metacharacters — Store-app entries end in `!App`
+    (shell:appsFolder\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App), App
+    Paths values can be %ProgramFiles%\\..., and installed apps have names
+    like "Dungeons & Dragons" — so the strict set would stop real apps from
+    launching. They are safe here because the target no longer passes
+    through a command line."""
+    _reject_unsafe(path, _PATH_ILLEGAL_CHARACTERS, kind="launch path")
+
+
+def _shell_execute(target: str) -> None:
+    """Open `target` via ShellExecuteW, with no shell in the loop.
+
+    os.startfile passes the string straight to ShellExecuteW, which resolves
+    it exactly as `start` did — file associations (.lnk, documents),
+    protocol handlers (steam://), the shell: namespace, and the App Paths
+    registry / PATH lookup for bare names — but never parses it as a
+    command line. Its own function so tests can patch this one seam;
+    os.startfile exists only on Windows."""
+    os.startfile(target)  # type: ignore[attr-defined]  # Windows-only
+
+
+def launch_app(command: str) -> None:
+    """Launch an app by bare name, so Windows resolves names like 'chrome'
+    or 'spotify' without us knowing their install path.
+
+    Was `cmd /c start "" <command>` (the leading "" being start's
+    window-title slot). ShellExecuteW keeps that resolution — `start` is a
+    wrapper around it — and drops the cmd.exe re-parse that let a token
+    like `notepad&calc` run two commands. Raises OSError when Windows
+    cannot resolve the name, which `start` did not; callers already treat
+    OSError as "try the next candidate". Tests patch _shell_execute."""
     _require_windows("launch_app")
-    subprocess.Popen(
-        ["cmd", "/c", "start", "", command],
-        shell=False,
-        creationflags=getattr(subprocess, "DETACHED_PROCESS", 0),
-    )
+    validate_launch_command(command)
+    _shell_execute(command)
 
 
 def launch_path(path: str) -> None:
-    """Launch a file or shortcut by full path (.lnk, .exe, etc.)."""
+    """Launch a file, shortcut or shell: URI by target (.lnk, .exe,
+    shell:appsFolder\\<AppUserModelID>, ...)."""
     _require_windows("launch_path")
-    subprocess.Popen(
-        ["cmd", "/c", "start", "", path],
-        shell=False,
-        creationflags=getattr(subprocess, "DETACHED_PROCESS", 0),
-    )
+    validate_launch_target_path(path)
+    # `cmd /c start` expanded %VAR% before ShellExecuteW ever saw the
+    # target, and App Paths registry values are sometimes REG_EXPAND_SZ
+    # (%ProgramFiles%\...), so keep that resolution behaviour. ntpath
+    # rather than os.path so the %VAR% form expands identically on the
+    # Linux hosts that run the tests. Pure string substitution — the
+    # expansion inserts a value, it cannot introduce a command.
+    _shell_execute(ntpath.expandvars(path))
 
 
 def launch_shell(target: str) -> None:
-    """Open a shell namespace URI (e.g. shell:AppsFolder\\... for Store apps)."""
+    """Open a shell namespace URI (e.g. shell:AppsFolder\\... for Store apps).
+
+    explorer.exe, not cmd.exe: it takes the URI as a single argument and
+    never treats `&` or `|` as a separator, so this function was not part of
+    the command-injection issue and keeps its subprocess call. The
+    validation is only defence in depth, and uses the path rule because
+    Store-app URIs legitimately contain `!`."""
     _require_windows("launch_shell")
+    validate_launch_target_path(target)
     subprocess.Popen(
         ["explorer.exe", target],
         close_fds=True,
@@ -74,13 +158,12 @@ def launch_shell(target: str) -> None:
 
 
 def launch_steam_game(app_id: int) -> None:
-    """Start a Steam library title via the steam:// protocol handler."""
+    """Start a Steam library title via the steam:// protocol handler.
+
+    app_id is an int, so this never carried injectable text; it goes through
+    ShellExecuteW for consistency with the other launchers."""
     _require_windows("launch_steam_game")
-    subprocess.Popen(
-        ["cmd", "/c", "start", "", f"steam://run/{app_id}"],
-        shell=False,
-        creationflags=getattr(subprocess, "DETACHED_PROCESS", 0),
-    )
+    _shell_execute(f"steam://run/{int(app_id)}")
 
 
 # -- screenshot ---------------------------------------------------------
@@ -227,11 +310,14 @@ def write_clipboard_text(text: str) -> None:
 __all__ = [
     "launch_app",
     "launch_path",
+    "launch_shell",
     "launch_steam_game",
     "lock_screen",
     "open_url",
     "read_clipboard_text",
     "screenshots_dir",
+    "validate_launch_command",
+    "validate_launch_target_path",
     "volume_down",
     "volume_mute_toggle",
     "volume_up",
