@@ -40,6 +40,24 @@ jobs:
         # are both configured for py311. 3.12 guards against the next
         # interpreter bump landing as a surprise.
         python-version: ["3.11", "3.12"]
+        exclude:
+          # ubuntu + 3.12 cannot install the package at all, for an upstream
+          # reason we cannot fix here: openwakeword declares
+          #   tflite-runtime <3,>=2.8.0 ; platform_system == "Linux"
+          # and tflite-runtime has exactly one release (2.14.0) with no
+          # cp312 wheels, so pip resolves to "from versions: none".
+          #
+          # This is Linux-only: the marker means Windows never pulls
+          # tflite-runtime, so windows-latest/3.12 still runs and remains the
+          # real guard against the next interpreter bump — which is the leg
+          # that matters, since Jarvis ships as a Windows application.
+          # Linux stays covered on 3.11.
+          #
+          # Revisit when tflite-runtime ships cp312 wheels, or when
+          # openwakeword drops it in favour of the onnxruntime backend it
+          # already depends on.
+          - os: ubuntu-latest
+            python-version: "3.12"
 
     env:
       # The UI tests in tests/ui/ construct real QWidgets, so Qt needs a
