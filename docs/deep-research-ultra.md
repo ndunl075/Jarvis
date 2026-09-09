@@ -7,11 +7,11 @@ Deep Research Ultra is an optional, **$0/month** upgrade to Jarvis’s standard 
 | Goal | How Ultra addresses it |
 |------|-------------------------|
 | Better search ranking | Brave Search API (free 2,000 queries/mo) with DuckDuckGo fallback |
-| Read JS-heavy pages | Jina Reader (`r.jina.ai`) when direct `httpx` fetch returns &lt;500 chars |
+| Read JS-heavy pages | Jina Reader (`r.jina.ai`) when direct `httpx` fetch returns &lt;500 chars — the page URL is sent to Jina, so private/loopback URLs are never forwarded (see *Fetch safety*) |
 | Stronger planning/synthesis | Groq `llama-3.3-70b-versatile` planner (free tier) with local fallback |
 | Deeper coverage | Up to **3** gap-fill iterations per sub-question (vs 1 in standard mode) |
 | Longer source context | **16,000** chars/page minimum when Ultra is on (vs 6,000 default) |
-| Privacy / cost | Worker extraction remains **local Ollama**; no paid subscription required |
+| Privacy / cost | Worker extraction remains **local Ollama**; no paid subscription required. Ultra does send each fetched page's URL (not its contents) to `r.jina.ai` when the direct fetch is thin |
 
 ## Modes compared
 
@@ -64,6 +64,25 @@ User: "deep research quantum computing"
 └───────────────────────────────────────────┘
 ```
 
+## Fetch safety
+
+`web_page_fetch.py` handles URLs that come from search results or from the
+planner LLM, i.e. from outside Jarvis. Both the direct path and the Jina path
+apply the same two guards:
+
+| Guard | Behavior |
+|-------|----------|
+| Response size | Body is streamed and capped at **5 MiB** (`_MAX_RESPONSE_BYTES`); the rest is never pulled from the socket. `Accept-Encoding: identity` is sent so the budget measures wire bytes rather than post-decompression bytes. |
+| Destination | Loopback, RFC1918 private, link-local (`169.254.0.0/16`), reserved, multicast and IPv6 unique-local destinations are refused. Hostnames are resolved first and **every** answer is checked, and redirects are followed manually (max 5 hops) so each hop is re-validated and cannot escape `http`/`https`. |
+
+Consequence for Ultra: a URL that fails the destination check is not fetched
+**and is not sent to `r.jina.ai`** — Jarvis will not hand a third party the
+address of something on the user's own machine or LAN. Refused fetches return
+`""`, so the pipeline falls back to the search snippet as usual.
+
+Resolution happens a moment before the connect, so this narrows but does not
+eliminate DNS rebinding.
+
 ## Module map
 
 | Module | Role |
@@ -71,7 +90,7 @@ User: "deep research quantum computing"
 | `jarvis/tools/local/deep_research_runner.py` | Pipeline orchestration, `DeepResearchConfig`, `build_deep_research_config()` |
 | `jarvis/tools/local/deep_research_store.py` | Session/report persistence (`ultra_mode` flag on state) |
 | `jarvis/tools/local/research_search.py` | Brave + DDG search |
-| `jarvis/tools/local/web_page_fetch.py` | Direct HTML extract + optional Jina fallback |
+| `jarvis/tools/local/web_page_fetch.py` | Direct HTML extract + optional Jina fallback; size cap + private-destination guard |
 | `jarvis/tools/local/research_llm.py` | `chat_once` routing: `groq/…` → Groq API, else Ollama |
 | `jarvis/tools/local/deep_research_tools.py` | Voice: start / pause / resume / delete |
 | `jarvis/tools/local/deep_research_ultra_tools.py` | Voice: enable / disable Ultra |
