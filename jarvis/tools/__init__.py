@@ -14,7 +14,7 @@ table and the Settings -> Tools list — is jarvis/tools/catalogue.py.
 """
 
 from collections.abc import Callable
-from typing import cast
+from typing import Any, cast
 
 from jarvis.tools.mcp_client import MCPManager, MCPServerConnection, MCPTool
 from jarvis.tools.registry import (
@@ -102,7 +102,7 @@ def setup_local_tools(
         from jarvis.core.config import VisionConfig
         vision_cfg = VisionConfig()
 
-    base_tools: list[object] = [
+    base_tools: list[Tool[Any]] = [
         ClipboardTool(),
         CloseAppTool(),
         ListDirectoryTool(),
@@ -126,7 +126,7 @@ def setup_local_tools(
             SeeScreenTool(ollama_client=ollama_client, vision_config=vision_cfg)
         )
     for tool in base_tools:
-        registry.register(tool)  # type: ignore[arg-type]
+        registry.register(tool)
 
 
 __all__ = [
